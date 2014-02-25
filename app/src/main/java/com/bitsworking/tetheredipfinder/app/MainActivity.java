@@ -1,25 +1,17 @@
 package com.bitsworking.tetheredipfinder.app;
 
-import android.app.ActionBar;
 import android.app.Activity;
 import android.os.AsyncTask;
-import android.support.v4.app.Fragment;
-import android.content.Context;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.Gravity;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.View;
-import android.view.ViewGroup;
-import android.widget.ArrayAdapter;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
@@ -48,7 +40,7 @@ public class MainActivity extends Activity {
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.action_settings:
-                setRefreshActionButtonState(false);
+                Toast.makeText(this, "Settings", Toast.LENGTH_LONG).show();
                 return true;
             case R.id.action_refresh:
                 setRefreshActionButtonState(true);
@@ -77,15 +69,41 @@ public class MainActivity extends Activity {
         nt.execute();
     }
 
-    public ArrayList<String> getTetheredIPAddresses() {
-        ArrayList<String> ret = new ArrayList<String>();
+    public class MemberDescriptor {
+        public String ip = "";
+        public String hw_type = "";
+        public String flags = "";
+        public String hw_address = "";
+        public String mask = "";
+        public String device = "";
+
+        public String hostname = "";
+        public String canonicalHostname = "";
+        public boolean isReachable = false;
+
+        public String toString() {
+            String ret = ip + ", " + hw_type + ", " + flags + ", " + hw_address + ", " + mask + ", " + device + ", hostname=" + hostname + ", canonicalHostname=" + canonicalHostname + ", reachable=" + isReachable;
+            return ret;
+        }
+    }
+
+    public ArrayList<MemberDescriptor> getTetheredIPAddresses() {
+        ArrayList<MemberDescriptor> ret = new ArrayList<MemberDescriptor>();
         try {
             BufferedReader br = new BufferedReader(new FileReader("/proc/net/arp"));
             String line = "";
             while((line = br.readLine()) != null) {
-                String[] parts = line.split(" ");
-                ret.add(parts[0]);
                 Log.v(TAG, line);
+                String[] parts = line.replaceAll("\\s+", " ").trim().split(" ");
+
+                MemberDescriptor md = new MemberDescriptor();
+                md.ip = parts[0];
+                md.hw_type = parts[1];
+                md.flags = parts[2];
+                md.hw_address = parts[3];
+                md.mask = parts[4];
+                md.device = parts[5];
+                ret.add(md);
             }
             br.close();
         }
@@ -97,23 +115,18 @@ public class MainActivity extends Activity {
         return ret;
     }
 
-    public class MemberDescriptor {
-        public String ip = "";
-        public String hostname = "";
-        public String canonicalHostname = "";
-    }
-
     class NetTask extends AsyncTask<String, Void, ArrayList<MemberDescriptor>> {
         protected ArrayList<MemberDescriptor> doInBackground(String... params) {
             ArrayList<MemberDescriptor> ret = new ArrayList<MemberDescriptor>();
-            for (String l : getTetheredIPAddresses()) {
-                MemberDescriptor md = new MemberDescriptor();
-                md.ip = l;
+            for (MemberDescriptor md : getTetheredIPAddresses()) {
                 try {
-                    InetAddress inetAddr = InetAddress.getByName(l);
+                    InetAddress inetAddr = InetAddress.getByName(md.ip);
                     md.hostname = inetAddr.getHostName();
                     md.canonicalHostname = inetAddr.getCanonicalHostName();
+                    md.isReachable = inetAddr.isReachable(2000);
                 } catch (UnknownHostException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
                     e.printStackTrace();
                 }
                 ret.add(md);
@@ -124,12 +137,8 @@ public class MainActivity extends Activity {
         protected void onPostExecute(ArrayList<MemberDescriptor> members) {
             String s = "";
             for (MemberDescriptor md : members) {
-                s += md.ip;
-                if (!md.hostname.equals(md.ip))
-                    s += " / " + md.hostname;
-                if (!md.canonicalHostname.equals(md.ip))
-                    s += " / " + md.canonicalHostname;
-                s += "\n";
+                s += md.toString();
+                s += "\n\n";
             }
             tv_ip.setText(s);
             setRefreshActionButtonState(false);

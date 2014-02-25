@@ -7,8 +7,7 @@
     <TextView
         android:layout_width="fill_parent"
         android:layout_height="wrap_content"
-        android:textAppearance="?android:attr/textAppearanceLarge"
-        android:text="192.168.1.10"
+        android:text="..."
         android:id="@+id/txt_ip"
         android:layout_marginTop="20dp"
         android:layout_marginLeft="20dp"
