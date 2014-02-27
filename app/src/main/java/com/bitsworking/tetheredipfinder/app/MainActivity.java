@@ -20,8 +20,12 @@ import com.bitsworking.tetheredipfinder.app.utils.Utils;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.InetAddress;
+import java.net.MalformedURLException;
 import java.net.Socket;
+import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 
@@ -48,6 +52,7 @@ public class MainActivity extends ListActivity {
         adapter = new IPListAdapter(this, null);
         setListAdapter(adapter);
         setContentView(R.layout.activity_main);
+        setRefreshActionButtonState(true);
         refreshIPs();
     }
 
@@ -58,6 +63,9 @@ public class MainActivity extends ListActivity {
         return true;
     }
 
+    /**
+     * Options click
+     */
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
@@ -65,7 +73,6 @@ public class MainActivity extends ListActivity {
                 Toast.makeText(this, "Settings", Toast.LENGTH_LONG).show();
                 return true;
             case R.id.action_refresh:
-                setRefreshActionButtonState(true);
                 refreshIPs();
                 return true;
 
@@ -73,6 +80,9 @@ public class MainActivity extends ListActivity {
         return super.onOptionsItemSelected(item);
     }
 
+    /**
+     * Handle click on a list item
+     */
     @Override
     protected void onListItemClick(ListView l, View v, int position, long id) {
         final MemberDescriptor item = (MemberDescriptor) getListAdapter().getItem(position);
@@ -85,7 +95,6 @@ public class MainActivity extends ListActivity {
         String ports[] = new String[item.ports.size()];
         for (int i=0; i<item.ports.size(); i++)
             ports[i] = "Port " + item.ports.get(i).toString();
-//        ports[item.ports.size()] = "Custom port";
 
         AlertDialog d = new AlertDialog.Builder(this)
                 .setTitle("Open " + item.ip)
@@ -112,6 +121,10 @@ public class MainActivity extends ListActivity {
 
     }
 
+    /**
+     * Enable / Disable the Action Bar refresh spinner
+     * @param refreshing true to show spinner, false to show refresh icon
+     */
     public void setRefreshActionButtonState(final boolean refreshing) {
         if (optionsMenu != null) {
             final MenuItem refreshItem = optionsMenu.findItem(R.id.action_refresh);
@@ -125,21 +138,24 @@ public class MainActivity extends ListActivity {
         }
     }
 
+    /**
+     * Refresh all
+     */
     private void refreshIPs() {
+        setRefreshActionButtonState(true);
+
         adapter.clear();
         adapter.notifyDataSetChanged();
-
-        // 1. Get local IPs
-        for (MemberDescriptor md : Utils.getIpAddress()) {
-            adapter.add(md);
-        }
 
         // 2. Get IPs from ARP
         NetTask nt = new NetTask();
         nt.execute();
     }
 
-    public ArrayList<MemberDescriptor> getTetheredIPAddresses() {
+    /**
+     * Read ARP cache to build hosts list
+     */
+    public ArrayList<MemberDescriptor> getHostsFromARPCache() {
         ArrayList<MemberDescriptor> ret = new ArrayList<MemberDescriptor>();
         try {
             BufferedReader br = new BufferedReader(new FileReader("/proc/net/arp"));
@@ -166,15 +182,28 @@ public class MainActivity extends ListActivity {
         return ret;
     }
 
+    /**
+     * Background task to get more information about hosts, and to check
+     * whether they can be reached.
+     *
+     * Also searches for 'usblooper' host on the local network.
+     */
     class NetTask extends AsyncTask<String, Void, ArrayList<MemberDescriptor>> {
         protected ArrayList<MemberDescriptor> doInBackground(String... params) {
             ArrayList<MemberDescriptor> ret = new ArrayList<MemberDescriptor>();
-            for (MemberDescriptor md : getTetheredIPAddresses()) {
+
+            // 1. Get local IPs
+            for (MemberDescriptor md : Utils.getIpAddress()) {
+                ret.add(md);
+            }
+
+            // 2. Get ARP Cache
+            for (MemberDescriptor md : getHostsFromARPCache()) {
                 try {
                     InetAddress inetAddr = InetAddress.getByName(md.ip);
                     md.hostname = inetAddr.getHostName();
                     md.canonicalHostname = inetAddr.getCanonicalHostName();
-                    md.isReachable = inetAddr.isReachable(2000);
+                    md.isReachable = inetAddr.isReachable(1000);
                     Log.v(TAG, md.toString());
                 } catch (UnknownHostException e) {
                     e.printStackTrace();
@@ -183,20 +212,58 @@ public class MainActivity extends ListActivity {
                 }
                 ret.add(md);
             }
+
+            // Try to find 'usblooper' hostname on the local network
+            try {
+                InetAddress inetAddr = InetAddress.getByName("usblooper");
+
+                // If a 'usblooper' host is found, check whether its already in the
+                // discovered arp hosts, else create a new MemberDescriptor
+                boolean usbLooperAlreadyFound = false;
+                for (MemberDescriptor md : ret) {
+                    if (md.ip.equals(inetAddr.getHostAddress())) {
+                        md.customDeviceName = "USB Looper";
+                        md.isRaspberry = true;
+                        usbLooperAlreadyFound = true;
+                    }
+                }
+
+                if (!usbLooperAlreadyFound) {
+                    MemberDescriptor md = new MemberDescriptor();
+                    md.ip = inetAddr.getHostAddress();
+                    md.customDeviceName = "USB Looper";
+                    md.isReachable = inetAddr.isReachable(2000);
+                    md.isRaspberry = true;
+                    ret.add(md);
+                }
+            } catch (UnknownHostException e) {
+//                e.printStackTrace();
+            } catch (IOException e) {
+//                e.printStackTrace();
+            }
+
             return ret;
         }
 
+        /**
+         * After building the list of hosts, start port-scan and USBLooper check
+         */
         protected void onPostExecute(ArrayList<MemberDescriptor> members) {
             for (MemberDescriptor md : members) {
                 adapter.add(md);
-                if (md.isReachable)
+                if (md.isReachable) {
                     new PortScanTask().execute(md);
+                    new USBLooperScanTask().execute(md);
+                }
             }
             adapter.notifyDataSetChanged();
             setRefreshActionButtonState(false);
         }
     }
 
+    /**
+     * Task to execute a port-scan on a specific ip
+     */
     class PortScanTask extends AsyncTask<MemberDescriptor, Void, MemberDescriptor> {
         protected MemberDescriptor doInBackground(MemberDescriptor... mds) {
             MemberDescriptor md = mds[0];
@@ -219,7 +286,44 @@ public class MainActivity extends ListActivity {
 
         protected void onPostExecute(MemberDescriptor md) {
             adapter.notifyDataSetChanged();
-//            setRefreshActionButtonState(false);
         }
     }
+
+    /**
+     * Task to check whether this is a USBLooper Raspberry
+     */
+    class USBLooperScanTask extends AsyncTask<MemberDescriptor, Void, MemberDescriptor> {
+        private String getWebserverInfo(String ip, int port) {
+            Log.v(TAG, "Check " + ip +":" + port);
+            try {
+                URL url = new URL("http://" + ip + ":" + port + "/sup/what");
+                InputStream is = (InputStream) url.getContent();
+                return (new BufferedReader(new InputStreamReader(is))).readLine();
+            } catch (MalformedURLException e) {
+//                e.printStackTrace();
+            } catch (IOException e) {
+//                e.printStackTrace();
+            }
+            return null;
+        }
+
+        protected MemberDescriptor doInBackground(MemberDescriptor... mds) {
+            MemberDescriptor md = mds[0];
+            for (Port port : md.ports) {
+                if (port.name.equals("http")) {
+                    String s = getWebserverInfo(md.ip, port.port);
+                    if (s != null) {
+                        md.customDeviceName = s;
+                        md.isRaspberry = true;
+                    }
+                }
+            }
+            return md;
+        }
+
+        protected void onPostExecute(MemberDescriptor md) {
+            adapter.notifyDataSetChanged();
+        }
+    }
+
 }

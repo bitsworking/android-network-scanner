@@ -21,6 +21,9 @@ public class MemberDescriptor {
     public String hostname = ""; // seems to be the same as up
     public String canonicalHostname = "";  // seems to be the same as up
 
+    public String customDeviceName = "";  // eg. 'USB Looper v1.3'
+    public boolean isRaspberry = false;
+
     public ArrayList<Port> ports = new ArrayList<Port>();
     public boolean isPortScanCompleted = false;
 

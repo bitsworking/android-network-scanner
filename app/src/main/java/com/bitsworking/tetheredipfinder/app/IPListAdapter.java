@@ -75,7 +75,9 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
         tv_label.setText(item.ip);
 
         if (item.device.equals("rndis0"))
-            item.device = "usb0";
+            item.device = "USB";
+        else if (item.device.startsWith("wlan"))
+            item.device = "Wi-Fi";
 
         String label = "";
         if (item.isLocalInterface) {
@@ -89,7 +91,8 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
             label = item.device + " - Probably a Router" + ((item.isReachable) ? "" : " (not reachable)");
             if (item.ports.size() > 0) {
                 label += " - Ports: ";
-                for (Port port : item.ports) label += port.toString() + " ";
+                for (Port port : item.ports) label += port.toString() + ", ";
+                if (label.trim().endsWith(",")) label = label.trim().substring(0, label.trim().length()-1);
             }
             tv_label.setTextColor(colorGray);
             tv_info.setTextColor(colorGray);
@@ -97,11 +100,19 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
 
         } else {
             // Normal Host
-            label = item.device + ((item.isReachable) ? "" : " (not reachable)");
+            label = item.device + ((!item.device.isEmpty()) ? " - " : "");
+            if (!item.customDeviceName.isEmpty()) label += item.customDeviceName;
+            if (!item.isReachable) label += " (not reachable)";
+            if (!item.customDeviceName.isEmpty() && item.isReachable) label += "\n";
             if (item.ports.size() > 0) {
-                label += " - Ports: ";
-                for (Port port : item.ports) label += port.toString() + " ";
+                if (item.customDeviceName.isEmpty()) label += " - ";
+                label += "Ports: ";
+                for (Port port : item.ports) label += port.toString() + ", ";
+                if (label.trim().endsWith(",")) label = label.trim().substring(0, label.trim().length()-1);
             }
+
+            if (item.isRaspberry)
+                iv_device.setImageResource(R.drawable.raspberry1);
         }
 
         tv_info.setText(label);
@@ -109,6 +120,7 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
         if (!item.isReachable) {
             tv_label.setTextColor(colorLightGray);
             tv_info.setTextColor(colorLightGray);
+            iv_device.setImageAlpha(100);
         }
 
         return rowView;
