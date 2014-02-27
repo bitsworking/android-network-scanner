@@ -1,31 +1,53 @@
 package com.bitsworking.tetheredipfinder.app;
 
-import android.app.Activity;
+import android.app.AlertDialog;
+import android.app.ListActivity;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.widget.TextView;
+import android.view.View;
+import android.widget.ListView;
 import android.widget.Toast;
+
+import com.bitsworking.tetheredipfinder.app.utils.Port;
+import com.bitsworking.tetheredipfinder.app.utils.Utils;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 
-public class MainActivity extends Activity {
+public class MainActivity extends ListActivity {
     private static final String TAG = "MainActivity";
-    private TextView tv_ip = null;
     private Menu optionsMenu;
+
+    private IPListAdapter adapter;
+
+    private final Port[] PORTS_TO_SCAN = {
+            new Port(7, "echo"),
+            new Port(21, "ftp"),
+            new Port(22, "ssh"),
+            new Port(23, "telnet"),
+            new Port(25, "smtp"),
+            new Port(80, "http"),
+            new Port(8000, "http"),
+            new Port(8888, "http"),
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        adapter = new IPListAdapter(this, null);
+        setListAdapter(adapter);
         setContentView(R.layout.activity_main);
-        tv_ip = (TextView) findViewById(R.id.txt_ip);
         refreshIPs();
     }
 
@@ -51,6 +73,45 @@ public class MainActivity extends Activity {
         return super.onOptionsItemSelected(item);
     }
 
+    @Override
+    protected void onListItemClick(ListView l, View v, int position, long id) {
+        final MemberDescriptor item = (MemberDescriptor) getListAdapter().getItem(position);
+
+        if (item.ports.size() == 0) {
+            Toast.makeText(this, "No open ports found for " + item.ip, Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        String ports[] = new String[item.ports.size()];
+        for (int i=0; i<item.ports.size(); i++)
+            ports[i] = "Port " + item.ports.get(i).toString();
+//        ports[item.ports.size()] = "Custom port";
+
+        AlertDialog d = new AlertDialog.Builder(this)
+                .setTitle("Open " + item.ip)
+                .setItems(ports, new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int which) {
+                        Log.v("ListDialog", "Clicked on " + which);
+
+                        if (which == item.ports.size()) {
+                            // custom port
+                        } else {
+                            Port port = item.ports.get(which);
+                            String _location = port.name + "://" + item.ip;
+                            if ((port.port == 8000) || (port.port == 8888))
+                                _location += ":" + port.port;
+                            Uri location = Uri.parse(_location);
+                            Intent intent = new Intent(Intent.ACTION_VIEW, location);
+                            Intent chooser = Intent.createChooser(intent, "Choose");
+                            startActivity(chooser);
+                        }
+                    }
+                })
+                .create();
+        d.show();
+
+    }
+
     public void setRefreshActionButtonState(final boolean refreshing) {
         if (optionsMenu != null) {
             final MenuItem refreshItem = optionsMenu.findItem(R.id.action_refresh);
@@ -65,26 +126,17 @@ public class MainActivity extends Activity {
     }
 
     private void refreshIPs() {
+        adapter.clear();
+        adapter.notifyDataSetChanged();
+
+        // 1. Get local IPs
+        for (MemberDescriptor md : Utils.getIpAddress()) {
+            adapter.add(md);
+        }
+
+        // 2. Get IPs from ARP
         NetTask nt = new NetTask();
         nt.execute();
-    }
-
-    public class MemberDescriptor {
-        public String ip = "";
-        public String hw_type = "";
-        public String flags = "";
-        public String hw_address = "";
-        public String mask = "";
-        public String device = "";
-
-        public String hostname = "";
-        public String canonicalHostname = "";
-        public boolean isReachable = false;
-
-        public String toString() {
-            String ret = ip + ", " + hw_type + ", " + flags + ", " + hw_address + ", " + mask + ", " + device + ", hostname=" + hostname + ", canonicalHostname=" + canonicalHostname + ", reachable=" + isReachable;
-            return ret;
-        }
     }
 
     public ArrayList<MemberDescriptor> getTetheredIPAddresses() {
@@ -111,7 +163,6 @@ public class MainActivity extends Activity {
 
         if (ret.size() > 0)
             ret.remove(0);
-
         return ret;
     }
 
@@ -124,6 +175,7 @@ public class MainActivity extends Activity {
                     md.hostname = inetAddr.getHostName();
                     md.canonicalHostname = inetAddr.getCanonicalHostName();
                     md.isReachable = inetAddr.isReachable(2000);
+                    Log.v(TAG, md.toString());
                 } catch (UnknownHostException e) {
                     e.printStackTrace();
                 } catch (IOException e) {
@@ -135,13 +187,39 @@ public class MainActivity extends Activity {
         }
 
         protected void onPostExecute(ArrayList<MemberDescriptor> members) {
-            String s = "";
             for (MemberDescriptor md : members) {
-                s += md.toString();
-                s += "\n\n";
+                adapter.add(md);
+                if (md.isReachable)
+                    new PortScanTask().execute(md);
             }
-            tv_ip.setText(s);
+            adapter.notifyDataSetChanged();
             setRefreshActionButtonState(false);
+        }
+    }
+
+    class PortScanTask extends AsyncTask<MemberDescriptor, Void, MemberDescriptor> {
+        protected MemberDescriptor doInBackground(MemberDescriptor... mds) {
+            MemberDescriptor md = mds[0];
+            Log.v(TAG, "Start Port Scanning: " + md.ip);
+            for (Port port : PORTS_TO_SCAN) {
+                try {
+                    // Try to create the Socket on the given port.
+                    Socket socket = new Socket(md.ip, port.port);
+                    // If we arrive here, the port is open!
+                    md.ports.add(port);
+                    // Don't forget to close it
+                    socket.close();
+                } catch (IOException e) {
+                    // Failed to open the port. Booh.
+                }
+            }
+            md.isPortScanCompleted = true;
+            return md;
+        }
+
+        protected void onPostExecute(MemberDescriptor md) {
+            adapter.notifyDataSetChanged();
+//            setRefreshActionButtonState(false);
         }
     }
 }
