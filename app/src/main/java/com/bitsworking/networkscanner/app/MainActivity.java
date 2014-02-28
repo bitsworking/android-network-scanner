@@ -30,6 +30,7 @@ import java.net.Socket;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
+import java.util.Iterator;
 
 public class MainActivity extends ListActivity {
     private static final String TAG = "NetworkScanner.MainActivity";
@@ -39,9 +40,6 @@ public class MainActivity extends ListActivity {
     private boolean resumeHasRun = false;
     private boolean isRefreshing = false;
     private int bgTasksRunning = 0;  // Counter to hide refresh spinner when all is done
-
-    // Hosts list built up during search
-    private ArrayList<MemberDescriptor> _hosts = new ArrayList<MemberDescriptor>();
 
     private Handler mHandler = new Handler();
 
@@ -173,7 +171,7 @@ public class MainActivity extends ListActivity {
     }
 
     private void addListViewItem(final MemberDescriptor md) {
-        mHandler.post(new Runnable() {
+        runOnUiThread(new Runnable() {
             @Override
             public void run() {
                 adapter.add(md);
@@ -217,6 +215,7 @@ public class MainActivity extends ListActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                ArrayList<MemberDescriptor> _hosts = new ArrayList<MemberDescriptor>();
                 for (MemberDescriptor _md : Utils.getIpAddress()) {
                     // For each subnet, check
                     String[] ipParts = _md.ip.split("[.]");
@@ -228,7 +227,10 @@ public class MainActivity extends ListActivity {
 
                     Thread[] scanThreads = new Thread[ipMax - ipMin + 1];
                     for (int i=ipMin; i<=ipMax; i++) {
-                        scanThreads[i-ipMin] = startIPScanThread(ipPrefix + i);
+                        MemberDescriptor newHost = new MemberDescriptor();
+                        newHost.ip = ipPrefix + i;
+                        _hosts.add(newHost);
+                        scanThreads[i-ipMin] = startIPScanThread(newHost);
                     }
 
                     Log.v(TAG, "Waiting for Threads...");
@@ -245,50 +247,95 @@ public class MainActivity extends ListActivity {
                         e.printStackTrace();
                     }
 
+                    // Remove unreachable hosts
+                    for (int i = _hosts.size()-1; i >= 0; i--){
+                        if (!_hosts.get(i).isReachable) {
+                            _hosts.remove(i);
+                        }
+                    }
+
+                    /** Update available hosts with ARP information and other infos */
                     ArrayList<MemberDescriptor> arpHosts = getHostsFromARPCache();
                     for (MemberDescriptor md : _hosts) {
-                        // Update with arp cache information
+                        if (!md.isReachable) {
+                            continue;
+                        }
+
                         for (MemberDescriptor arpHost : arpHosts) {
                             if (arpHost.ip.equals(md.ip)) {
                                 md.hw_address = arpHost.hw_address;
                                 md.hw_type = arpHost.hw_type;
                                 md.device = arpHost.device;
                                 md.flags = arpHost.flags;
+                                break;
                             }
                         }
 
+                        if (md.hostname.startsWith("raspberry")) {
+                            md.isRaspberry = true;
+                            md.customDeviceName = "Raspberry Pi";
+                        }
+
+                        // Check whether MAC prefix matches one of our presets
+                        for (MACPrefix macPrefix : Settings.MAC_PREFIXES) {
+                            if (macPrefix.prefix.toLowerCase().equals(md.hw_address.toLowerCase())) {
+                                md.customDeviceName = macPrefix.name;
+                                md.drawable = macPrefix.drawable;
+                            }
+                        }
+
+                        // Check whether this is a local interface ip
                         if (md.ip.equals(_md.ip)) {
                             md.isLocalInterface = true;
-                            // we dont get any more information about the local
                         }
 
                         Log.v(TAG, "- Host updated: " + md.toString());
-
+                        addListViewItem(md);
                     }
+
+                    mHandler.post(new Runnable() {
+                        public void run() {
+                            adapter.notifyDataSetChanged();
+                        }
+                    });
+
+                    // Start port scanning
+                    Thread[] portScanThreads = new Thread[_hosts.size()];
+                    for (int i=0; i<_hosts.size(); i++) {
+                        portScanThreads[i] = startPortScanThread(_hosts.get(i));
+                    }
+
+                    Log.v(TAG, "Waiting for Portscan Threads...");
+                    for (int i=0; i<portScanThreads.length; i++) {
+                        try {
+                            portScanThreads[i].join();
+                        } catch (InterruptedException e) {}
+                    }
+
+                    mHandler.post(new Runnable() {
+                        public void run() {
+                            adapter.notifyDataSetChanged();
+                            setRefreshActionButtonState(false);
+                        }
+                    });
                 }
             }
         }).start();
     }
 
-    private Thread startIPScanThread(final String ip) {
+    /**
+     * Checks whether a given IP can be reached
+     */
+    private Thread startIPScanThread(final MemberDescriptor md) {
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
 //                Log.v(TAG, "Start ip scan for " + ip);
-                MemberDescriptor md = new MemberDescriptor();
-                md.ip = ip;
-
                 try {
                     InetAddress inetAddr = InetAddress.getByName(md.ip);
                     md.hostname = inetAddr.getHostName();
                     md.canonicalHostname = inetAddr.getCanonicalHostName();
                     md.isReachable = inetAddr.isReachable(1000);
-
-                    if (md.hostname.startsWith("raspberry"))
-                        md.isRaspberry = true;
-
-                    if (md.isReachable)
-                        _hosts.add(md);
                 } catch (UnknownHostException e) {
                 } catch (IOException e) {}
             }
@@ -297,246 +344,44 @@ public class MainActivity extends ListActivity {
         return t;
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     /**
-     * Background task to get more information about hosts, and to check
-     * whether they can be reached.
-     *
-     * Also searches for 'usblooper' host on the local network.
+     * Checks whether a given IP can be reached
      */
-    class NetworkScanTask extends AsyncTask<Void, Void, ArrayList<MemberDescriptor>> {
-        protected ArrayList<MemberDescriptor> doInBackground(Void... params) {
-            ArrayList<MemberDescriptor> ret = new ArrayList<MemberDescriptor>();
-
-            // 1. Get local IPs
-            for (MemberDescriptor md : Utils.getIpAddress()) {
-                ret.add(md);
-            }
-//
-//            // 2. Get ARP Cache
-//            for (MemberDescriptor md : getHostsFromARPCache()) {
-//                try {
-//                    InetAddress inetAddr = InetAddress.getByName(md.ip);
-//                    md.hostname = inetAddr.getHostName();
-//                    md.canonicalHostname = inetAddr.getCanonicalHostName();
-//                    md.isReachable = inetAddr.isReachable(1000);
-//                    Log.v(TAG, md.toString());
-//                } catch (UnknownHostException e) {
-//                    e.printStackTrace();
-//                } catch (IOException e) {
-//                    e.printStackTrace();
-//                }
-//                ret.add(md);
-//            }
-//
-//            // Try to find custom Raspberry hostnames on the local network
-//            for (String hostname : HOSTNAMES_RASPBERRY) {
-//                Log.v(TAG, "Trying to find hostname " + hostname + "...");
-//                try {
-//                    InetAddress inetAddr = InetAddress.getByName(hostname);
-//
-//                    // If hostname is found, check whether its already in the
-//                    // discovered arp hosts, else create a new MemberDescriptor
-//                    boolean hostnameAlreadyFound = false;
-//                    for (MemberDescriptor md : ret) {
-//                        if (md.ip.equals(inetAddr.getHostAddress())) {
-//                            md.customDeviceName = hostname;
-//                            md.isRaspberry = true;
-//                            hostnameAlreadyFound = true;
-//                        }
-//                    }
-//
-//                    if (!hostnameAlreadyFound) {
-//                        MemberDescriptor md = new MemberDescriptor();
-//                        md.ip = inetAddr.getHostAddress();
-//                        md.customDeviceName = hostname;
-//                        md.isReachable = inetAddr.isReachable(2000);
-//                        md.isRaspberry = true;
-//                        ret.add(md);
-//                    }
-//                } catch (UnknownHostException e) {
-//                } catch (IOException e) {
-//                }
-//            }
-
-            return ret;
-        }
-    }
-
-    /**
-     * Background task to get more information about hosts, and to check
-     * whether they can be reached.
-     *
-     * Also searches for 'usblooper' host on the local network.
-     */
-    class NetTask extends AsyncTask<String, Void, ArrayList<MemberDescriptor>> {
-        protected ArrayList<MemberDescriptor> doInBackground(String... params) {
-            ArrayList<MemberDescriptor> ret = new ArrayList<MemberDescriptor>();
-
-            // 1. Get local IPs
-            for (MemberDescriptor md : Utils.getIpAddress()) {
-                ret.add(md);
-            }
-
-            // 2. Get ARP Cache
-            for (MemberDescriptor md : getHostsFromARPCache()) {
-                try {
-                    InetAddress inetAddr = InetAddress.getByName(md.ip);
-                    md.hostname = inetAddr.getHostName();
-                    md.canonicalHostname = inetAddr.getCanonicalHostName();
-                    md.isReachable = inetAddr.isReachable(1000);
-                    Log.v(TAG, md.toString());
-                } catch (UnknownHostException e) {
-                    e.printStackTrace();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                ret.add(md);
-            }
-
-            // Try to find custom Raspberry hostnames on the local network
-//            for (String hostname : HOSTNAMES_RASPBERRY) {
-//                Log.v(TAG, "Trying to find hostname " + hostname + "...");
-//                try {
-//                    InetAddress inetAddr = InetAddress.getByName(hostname);
-//
-//                    // If hostname is found, check whether its already in the
-//                    // discovered arp hosts, else create a new MemberDescriptor
-//                    boolean hostnameAlreadyFound = false;
-//                    for (MemberDescriptor md : ret) {
-//                        if (md.ip.equals(inetAddr.getHostAddress())) {
-//                            md.customDeviceName = hostname;
-//                            md.isRaspberry = true;
-//                            hostnameAlreadyFound = true;
-//                        }
-//                    }
-//
-//                    if (!hostnameAlreadyFound) {
-//                        MemberDescriptor md = new MemberDescriptor();
-//                        md.ip = inetAddr.getHostAddress();
-//                        md.customDeviceName = hostname;
-//                        md.isReachable = inetAddr.isReachable(2000);
-//                        md.isRaspberry = true;
-//                        ret.add(md);
-//                    }
-//                } catch (UnknownHostException e) {
-//                } catch (IOException e) {
-//                }
-//            }
-
-            return ret;
-        }
-
-        /**
-         * After building the list of hosts, start port-scan and USBLooper check
-         */
-        protected void onPostExecute(ArrayList<MemberDescriptor> members) {
-            Log.v(TAG, "NetTask PostExecute...");
-            for (MemberDescriptor md : members) {
-                adapter.add(md);
-                if (md.isReachable && !md.isLocalInterface) {
-                    bgTasksRunning += 2;
-                    new PortScanTask().execute(md);
-                    new USBLooperScanTask().execute(md);
-                }
-            }
-            adapter.notifyDataSetChanged();
-            Log.v(TAG, "NetTask PostExecute -- bgTasks: " + bgTasksRunning);
-            if (bgTasksRunning == 0) {
-                setRefreshActionButtonState(false);
-            }
-        }
-    }
-
-    /**
-     * Task to execute a port-scan on a specific ip
-     */
-    class PortScanTask extends AsyncTask<MemberDescriptor, Void, MemberDescriptor> {
-        protected MemberDescriptor doInBackground(MemberDescriptor... mds) {
-            MemberDescriptor md = mds[0];
-            Log.v(TAG, "Start Port Scanning: " + md.ip);
-//            for (Port port : PORTS_TO_SCAN) {
-//                try {
-//                    // Try to create the Socket on the given port.
-//                    Socket socket = new Socket(md.ip, port.port);
-//                    // If we arrive here, the port is open!
-//                    md.ports.add(port);
-//                    // Don't forget to close it
-//                    socket.close();
-//                } catch (IOException e) {
-//                    // Failed to open the port. Booh.
-//                }
-//            }
-            md.isPortScanCompleted = true;
-            return md;
-        }
-
-        protected void onPostExecute(MemberDescriptor md) {
-            adapter.notifyDataSetChanged();
-            if (--bgTasksRunning == 0)
-                setRefreshActionButtonState(false);
-        }
-    }
-
-    /**
-     * Task to check whether this is a USBLooper Raspberry
-     */
-    class USBLooperScanTask extends AsyncTask<MemberDescriptor, Void, MemberDescriptor> {
-        private String getWebserverInfo(String ip, int port) {
-            Log.v(TAG, "Check " + ip +":" + port);
-            try {
-                URL url = new URL("http://" + ip + ":" + port + "/sup/what");
-                InputStream is = (InputStream) url.getContent();
-                return (new BufferedReader(new InputStreamReader(is))).readLine();
-            } catch (MalformedURLException e) {
-//                e.printStackTrace();
-            } catch (IOException e) {
-//                e.printStackTrace();
-            }
-            return null;
-        }
-
-        protected MemberDescriptor doInBackground(MemberDescriptor... mds) {
-            MemberDescriptor md = mds[0];
-            for (Port port : md.ports) {
-                if (port.name.equals("http")) {
-                    String s = getWebserverInfo(md.ip, port.port);
-                    if (s != null) {
-                        md.customDeviceName = s;
-                        md.isRaspberry = true;
+    private Thread startPortScanThread(final MemberDescriptor md) {
+        Thread t = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Log.v(TAG, "Start ip scan for " + md.ip);
+                for (Port port : Settings.PORTS_TO_SCAN) {
+                    try {
+                        // Try to create the Socket on the given port.
+                        Socket socket = new Socket(md.ip, port.port);
+                        // If we arrive here, the port is open!
+                        md.ports.add(port);
+                        // Don't forget to close it
+                        socket.close();
+                    } catch (IOException e) {
+                        // Failed to open the port. Socket is closed.
                     }
                 }
+
+                // Custom Bitsworking webserver scan
+                for (Port port : md.ports) {
+                    if (port.name.equals("http")) {
+                        try {
+                            URL url = new URL("http://" + md.ip + ":" + port + "/sup/what");
+                            InputStream is = (InputStream) url.getContent();
+                            md.customDeviceName = (new BufferedReader(new InputStreamReader(is))).readLine();
+                        } catch (MalformedURLException e) {
+                        } catch (IOException e) {
+                        }
+                    }
+                }
+
+                md.isPortScanCompleted = true;
             }
-            return md;
-        }
-
-        protected void onPostExecute(MemberDescriptor md) {
-            adapter.notifyDataSetChanged();
-            if (--bgTasksRunning == 0)
-                setRefreshActionButtonState(false);
-        }
+        });
+        t.start();
+        return t;
     }
-
 }

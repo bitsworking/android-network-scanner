@@ -75,16 +75,17 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
         tv_label.setText(item.ip);
 
         if (item.device.equals("rndis0"))
-            item.device = "USB";
-        else if (item.device.startsWith("wlan"))
-            item.device = "Wi-Fi";
+            item.device = "usb";
+//        else if (item.device.startsWith("wlan"))
+//            item.device = "Wi-Fi";
 
         String label = "";
         if (item.isLocalInterface) {
-            label = item.device + " - Android Local IP";
+            label = item.device + " - Local Android IP";
             tv_label.setTextColor(colorGray);
             tv_info.setTextColor(colorGray);
             iv_device.setImageResource(R.drawable.android1);
+            iv_device.setAlpha(130);
 
         } else if (item.ip.endsWith(".1")) {
             // Router
@@ -102,7 +103,7 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
             // Normal Host
             label = item.device + ((!item.device.isEmpty()) ? " - " : "");
             if (!item.customDeviceName.isEmpty()) label += item.customDeviceName;
-            if (!item.isReachable) label += " (not reachable)";
+            label += " - " + item.hostname;
             if (!item.customDeviceName.isEmpty() && item.isReachable) label += "\n";
             if (item.ports.size() > 0) {
                 if (item.customDeviceName.isEmpty()) label += " - ";
@@ -120,7 +121,7 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
         if (!item.isReachable) {
             tv_label.setTextColor(colorLightGray);
             tv_info.setTextColor(colorLightGray);
-            iv_device.setImageAlpha(100);
+            iv_device.setAlpha(100);
         }
 
         return rowView;

@@ -6,7 +6,7 @@ package com.bitsworking.networkscanner.app.utils;
 public class MACPrefix {
     public String prefix = "";
     public String name = "";
-    public int drawable;
+    public int drawable = -1;
     public MACPrefix(String prefix, String name, int drawable) {
         this.prefix = prefix;
         this.name = name;
