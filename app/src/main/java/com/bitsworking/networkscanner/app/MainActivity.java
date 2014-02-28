@@ -5,7 +5,6 @@ import android.app.ListActivity;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
@@ -30,7 +29,6 @@ import java.net.Socket;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
-import java.util.Iterator;
 
 public class MainActivity extends ListActivity {
     private static final String TAG = "NetworkScanner.MainActivity";
@@ -39,8 +37,6 @@ public class MainActivity extends ListActivity {
 
     private boolean resumeHasRun = false;
     private boolean isRefreshing = false;
-    private int bgTasksRunning = 0;  // Counter to hide refresh spinner when all is done
-
     private Handler mHandler = new Handler();
 
     @Override
@@ -150,7 +146,7 @@ public class MainActivity extends ListActivity {
     }
 
     /**
-     * Refresh all
+     * Start network scan
      */
     private void refreshIPs() {
         isRefreshing = true;
@@ -159,15 +155,7 @@ public class MainActivity extends ListActivity {
         adapter.clear();
         adapter.notifyDataSetChanged();
 
-        // 2. Get IPs from ARP
-//        NetTask nt = new NetTask();
-//        nt.execute();
         startNetworkScanThread();
-    }
-
-    private void refreshingDone() {
-        isRefreshing = false;
-        setRefreshActionButtonState(false);
     }
 
     private void addListViewItem(final MemberDescriptor md) {
@@ -179,9 +167,8 @@ public class MainActivity extends ListActivity {
         });
     }
 
-
     /**
-     * Read ARP cache to build hosts list
+     * Get Host infos from ARP cache
      */
     public ArrayList<MemberDescriptor> getHostsFromARPCache() {
         ArrayList<MemberDescriptor> ret = new ArrayList<MemberDescriptor>();
@@ -205,26 +192,31 @@ public class MainActivity extends ListActivity {
         }
         catch(Exception e) { Log.e(TAG, e.toString()); }
 
-        // Remote first line (text header)
+        // Remove first line (text header)
         if (ret.size() > 0)
             ret.remove(0);
         return ret;
     }
 
+    /**
+     * Main Network Scanner Thread. Starts all other threads and waits until finished.
+     */
     private void startNetworkScanThread() {
         new Thread(new Runnable() {
             @Override
             public void run() {
                 ArrayList<MemberDescriptor> _hosts = new ArrayList<MemberDescriptor>();
+
+                // For each subnet, do a network scan
                 for (MemberDescriptor _md : Utils.getIpAddress()) {
-                    // For each subnet, check
                     String[] ipParts = _md.ip.split("[.]");
                     String ipPrefix = ipParts[0] + "." + ipParts[1] + "." + ipParts[2] + ".";
 
                     final int ipMin = 1;
-                    final int ipMax = 110;
+                    final int ipMax = 254;
                     Log.v(TAG, "Start ip scan from " + ipPrefix + ipMin + " to " + ipPrefix + ipMax);
 
+                    // Start Threads which check if IP is reachable
                     Thread[] scanThreads = new Thread[ipMax - ipMin + 1];
                     for (int i=ipMin; i<=ipMax; i++) {
                         MemberDescriptor newHost = new MemberDescriptor();
@@ -233,6 +225,7 @@ public class MainActivity extends ListActivity {
                         scanThreads[i-ipMin] = startIPScanThread(newHost);
                     }
 
+                    // Wait for threads to finish
                     Log.v(TAG, "Waiting for Threads...");
                     for (int i=0; i<scanThreads.length; i++) {
                         try {
@@ -240,6 +233,7 @@ public class MainActivity extends ListActivity {
                         } catch (InterruptedException e) {}
                     }
 
+                    // Short pause seems to be necessary for ARP cache to update
                     Log.v(TAG, "Threads finished.");
                     try {
                         Thread.sleep(1000);
@@ -254,13 +248,9 @@ public class MainActivity extends ListActivity {
                         }
                     }
 
-                    /** Update available hosts with ARP information and other infos */
+                    // Update available hosts with ARP information and other infos
                     ArrayList<MemberDescriptor> arpHosts = getHostsFromARPCache();
                     for (MemberDescriptor md : _hosts) {
-                        if (!md.isReachable) {
-                            continue;
-                        }
-
                         for (MemberDescriptor arpHost : arpHosts) {
                             if (arpHost.ip.equals(md.ip)) {
                                 md.hw_address = arpHost.hw_address;
@@ -271,16 +261,11 @@ public class MainActivity extends ListActivity {
                             }
                         }
 
-                        if (md.hostname.startsWith("raspberry")) {
-                            md.isRaspberry = true;
-                            md.customDeviceName = "Raspberry Pi";
-                        }
-
                         // Check whether MAC prefix matches one of our presets
                         for (MACPrefix macPrefix : Settings.MAC_PREFIXES) {
                             if (macPrefix.prefix.toLowerCase().equals(md.hw_address.toLowerCase())) {
                                 md.customDeviceName = macPrefix.name;
-                                md.drawable = macPrefix.drawable;
+                                md.deviceType = macPrefix.deviceType;
                             }
                         }
 
@@ -289,10 +274,13 @@ public class MainActivity extends ListActivity {
                             md.isLocalInterface = true;
                         }
 
-                        Log.v(TAG, "- Host updated: " + md.toString());
+                        // Add item to ListView adapter
                         addListViewItem(md);
+
+                        Log.v(TAG, "+ Host: " + md.toString());
                     }
 
+                    // Items have been added to adapter. Refresh ListView now.
                     mHandler.post(new Runnable() {
                         public void run() {
                             adapter.notifyDataSetChanged();
@@ -305,6 +293,7 @@ public class MainActivity extends ListActivity {
                         portScanThreads[i] = startPortScanThread(_hosts.get(i));
                     }
 
+                    // Wait for port-scanning threads to finish
                     Log.v(TAG, "Waiting for Portscan Threads...");
                     for (int i=0; i<portScanThreads.length; i++) {
                         try {
@@ -312,6 +301,7 @@ public class MainActivity extends ListActivity {
                         } catch (InterruptedException e) {}
                     }
 
+                    // All done. Last UI update for this refresh!
                     mHandler.post(new Runnable() {
                         public void run() {
                             adapter.notifyDataSetChanged();
@@ -345,13 +335,13 @@ public class MainActivity extends ListActivity {
     }
 
     /**
-     * Checks whether a given IP can be reached
+     * Does a portscan and webserver scan on a given IP
      */
     private Thread startPortScanThread(final MemberDescriptor md) {
         Thread t = new Thread(new Runnable() {
             @Override
             public void run() {
-                Log.v(TAG, "Start ip scan for " + md.ip);
+                Log.v(TAG, "Start port+server scan for " + md.ip);
                 for (Port port : Settings.PORTS_TO_SCAN) {
                     try {
                         // Try to create the Socket on the given port.

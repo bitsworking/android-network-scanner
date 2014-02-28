@@ -9,8 +9,9 @@ import java.util.ArrayList;
  */
 public class MemberDescriptor {
     public static final int DEVICE_TYPE_ROUTER = 1;
-    public static final int DEVICE_TYPE_HOST = 2;
+    public static final int DEVICE_TYPE_HOST_UNKNOWN = 2;
     public static final int DEVICE_TYPE_HOST_RASPBERRY = 3;
+    public static final int DEVICE_TYPE_HOST_ANDROID = 4;
 
     public String ip = "";
     public String hw_type = "";
@@ -18,27 +19,33 @@ public class MemberDescriptor {
     public String hw_address = "";
     public String mask = "";
     public String device = "";
-
-    public boolean isReachable = false;
-    public boolean isLocalInterface = false;
-
     public String hostname = ""; // seems to be the same as up
     public String canonicalHostname = "";  // seems to be the same as up
-
-    public String customDeviceName = "";  // eg. 'USB Looper v1.3'
-    public int drawable = -1;
-    public boolean isRaspberry = false;
 
     public ArrayList<Port> ports = new ArrayList<Port>();
     public boolean isPortScanCompleted = false;
 
+    public String customDeviceName = "";  // eg. 'USB Looper v1.3'
+
+    public boolean isReachable = false;
+    public boolean isLocalInterface = false;
+
+    public int deviceType = 2;
+    public boolean isRaspberry = false;
+    public boolean isAndroid = false;
+
     public int getHostType() {
-        if (isRaspberry)
+        if (isRaspberry || deviceType == DEVICE_TYPE_HOST_RASPBERRY || hostname.toLowerCase().startsWith("raspberry"))
             return DEVICE_TYPE_HOST_RASPBERRY;
-        else if (ip.endsWith("."))
+
+        else if (isLocalInterface || isAndroid || deviceType == DEVICE_TYPE_HOST_ANDROID || hostname.toLowerCase().startsWith("android"))
+            return DEVICE_TYPE_HOST_ANDROID;
+
+        else if (ip.endsWith(".1") || deviceType == DEVICE_TYPE_ROUTER)
             return DEVICE_TYPE_ROUTER;
+
         else
-            return DEVICE_TYPE_HOST;
+            return DEVICE_TYPE_HOST_UNKNOWN;
     }
 
     @Override
