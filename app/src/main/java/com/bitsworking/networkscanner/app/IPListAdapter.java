@@ -1,4 +1,4 @@
-package com.bitsworking.tetheredipfinder.app;
+package com.bitsworking.networkscanner.app;
 
 import android.content.Context;
 import android.content.res.Resources;
@@ -9,7 +9,7 @@ import android.widget.ArrayAdapter;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import com.bitsworking.tetheredipfinder.app.utils.Port;
+import com.bitsworking.networkscanner.app.utils.Port;
 
 import java.util.ArrayList;
 

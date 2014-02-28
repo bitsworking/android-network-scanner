@@ -1,8 +1,8 @@
-package com.bitsworking.tetheredipfinder.app.utils;
+package com.bitsworking.networkscanner.app.utils;
 
 import android.util.Log;
 
-import com.bitsworking.tetheredipfinder.app.MemberDescriptor;
+import com.bitsworking.networkscanner.app.MemberDescriptor;
 
 import java.net.Inet4Address;
 import java.net.InetAddress;
@@ -23,8 +23,9 @@ public class Utils {
                 for (Enumeration enumIpAddr = intf.getInetAddresses(); enumIpAddr.hasMoreElements();) {
                     InetAddress inetAddress = (InetAddress) enumIpAddr.nextElement();
                     if (!inetAddress.isLoopbackAddress()&&inetAddress instanceof Inet4Address) {
-                        String ipAddress=inetAddress.getHostAddress().toString();
-                        Log.e("IP address",""+ipAddress + ", iface=" + intf.getDisplayName() + "/" + intf.getName());
+                        String ipAddress = inetAddress.getHostAddress();
+                        Log.e("IP address", ipAddress + ", iface=" + intf.getDisplayName() + "/" + intf.getName());
+
                         MemberDescriptor md = new MemberDescriptor();
                         md.ip = ipAddress;
                         md.device = intf.getName();

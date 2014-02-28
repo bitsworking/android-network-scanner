@@ -1,4 +1,4 @@
-package com.bitsworking.tetheredipfinder.app.utils;
+package com.bitsworking.networkscanner.app.utils;
 
 /**
  * Created by chris on 27/02/14.

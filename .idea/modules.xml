@@ -2,6 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/NetworkScannerA.iml" filepath="$PROJECT_DIR$/NetworkScannerA.iml" />
+      <module fileurl="file://$PROJECT_DIR$/NetworkScannerX.iml" filepath="$PROJECT_DIR$/NetworkScannerX.iml" />
       <module fileurl="file://$PROJECT_DIR$/TetheredIPFinder.iml" filepath="$PROJECT_DIR$/TetheredIPFinder.iml" />
       <module fileurl="file://$PROJECT_DIR$/app/app.iml" filepath="$PROJECT_DIR$/app/app.iml" />
     </modules>
