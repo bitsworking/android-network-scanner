@@ -323,8 +323,10 @@ public class MainActivity extends ListActivity {
 //                Log.v(TAG, "Start ip scan for " + ip);
                 try {
                     InetAddress inetAddr = InetAddress.getByName(md.ip);
-                    md.hostname = inetAddr.getHostName();
-                    md.canonicalHostname = inetAddr.getCanonicalHostName();
+                    if (!inetAddr.getHostName().equals(md.ip))
+                        md.hostname = inetAddr.getHostName();
+                    if (!inetAddr.getCanonicalHostName().equals(md.ip))
+                        md.canonicalHostname = inetAddr.getCanonicalHostName();
                     md.isReachable = inetAddr.isReachable(1000);
                 } catch (UnknownHostException e) {
                 } catch (IOException e) {}

@@ -76,44 +76,43 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
 
         if (item.device.equals("rndis0"))
             item.device = "usb";
-//        else if (item.device.startsWith("wlan"))
-//            item.device = "Wi-Fi";
 
         String label = "";
+        if (!item.device.isEmpty()) label += item.device + " - ";
+        if (!item.customDeviceName.isEmpty()) label += item.customDeviceName + " - ";
         if (item.isLocalInterface) {
-            label = item.device + " - Local Android IP";
+            label += "Local Android IP";
+            if (!item.hostname.isEmpty()) label += " - " + item.hostname;
             tv_label.setTextColor(colorGray);
             tv_info.setTextColor(colorGray);
             iv_device.setImageResource(R.drawable.android1);
-            iv_device.setAlpha(130);
+            iv_device.setAlpha(150);
 
-        } else if (item.ip.endsWith(".1")) {
+        } else if (item.getHostType() == MemberDescriptor.DEVICE_TYPE_ROUTER) {
             // Router
-            label = item.device + " - Probably a Router" + ((item.isReachable) ? "" : " (not reachable)");
-            if (item.ports.size() > 0) {
-                label += " - Ports: ";
-                for (Port port : item.ports) label += port.toString() + ", ";
-                if (label.trim().endsWith(",")) label = label.trim().substring(0, label.trim().length()-1);
-            }
+            label += "Probably a Router" + ((item.isReachable) ? "" : " (not reachable)");
+            if (!item.hostname.isEmpty()) label += " - " + item.hostname;
             tv_label.setTextColor(colorGray);
             tv_info.setTextColor(colorGray);
             iv_device.setImageResource(R.drawable.router2);
 
         } else {
             // Normal Host
-            label = item.device + ((!item.device.isEmpty()) ? " - " : "");
-            if (!item.customDeviceName.isEmpty()) label += item.customDeviceName;
-            label += " - " + item.hostname;
+            if (!item.customDeviceName.isEmpty()) label += item.customDeviceName + " - ";
+            if (!item.hostname.isEmpty()) label += item.hostname;
             if (!item.customDeviceName.isEmpty() && item.isReachable) label += "\n";
-            if (item.ports.size() > 0) {
-                if (item.customDeviceName.isEmpty()) label += " - ";
-                label += "Ports: ";
-                for (Port port : item.ports) label += port.toString() + ", ";
-                if (label.trim().endsWith(",")) label = label.trim().substring(0, label.trim().length()-1);
-            }
 
-            if (item.isRaspberry)
+            if (item.getHostType() == MemberDescriptor.DEVICE_TYPE_HOST_RASPBERRY)
                 iv_device.setImageResource(R.drawable.raspberry1);
+
+            else if (item.getHostType() == MemberDescriptor.DEVICE_TYPE_HOST_ANDROID)
+                iv_device.setImageResource(R.drawable.android1);
+        }
+
+        if (item.ports.size() > 0) {
+            label += " - Ports: ";
+            for (Port port : item.ports) label += port.toString() + ", ";
+            if (label.trim().endsWith(",")) label = label.trim().substring(0, label.trim().length()-1);
         }
 
         tv_info.setText(label);
