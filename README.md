@@ -2,7 +2,4 @@ Inspiration: https://github.com/dps/piui/tree/master/android/src/org/davidsingle
 
 Next Steps
 ----------
-* After arp reading, do some discovery
-  * try to find out whether ips contain webserver, raspberry, ssh, etc
-    and update rowlayout accordingly
-  * on click: show popup with action
+* on long click: customize host (set custom name, color, etc)

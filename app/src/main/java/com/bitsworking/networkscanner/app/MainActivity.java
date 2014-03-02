@@ -185,7 +185,7 @@ public class MainActivity extends ListActivity {
                 md.hw_address = parts[3];
                 md.mask = parts[4];
                 md.device = parts[5];
-//                Log.v(TAG, "arpHost: " + md.toString());
+                Log.v(TAG, "arpHost: " + md.toString());
                 ret.add(md);
             }
             br.close();
@@ -208,7 +208,8 @@ public class MainActivity extends ListActivity {
                 ArrayList<MemberDescriptor> _hosts = new ArrayList<MemberDescriptor>();
 
                 // For each subnet, do a network scan
-                for (MemberDescriptor _md : Utils.getIpAddress()) {
+                ArrayList<MemberDescriptor> localMembers = Utils.getIpAddress();
+                for (MemberDescriptor _md : localMembers) {
                     String[] ipParts = _md.ip.split("[.]");
                     String ipPrefix = ipParts[0] + "." + ipParts[1] + "." + ipParts[2] + ".";
 
@@ -240,75 +241,77 @@ public class MainActivity extends ListActivity {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-
-                    // Remove unreachable hosts
-                    for (int i = _hosts.size()-1; i >= 0; i--){
-                        if (!_hosts.get(i).isReachable) {
-                            _hosts.remove(i);
-                        }
-                    }
-
-                    // Update available hosts with ARP information and other infos
-                    ArrayList<MemberDescriptor> arpHosts = getHostsFromARPCache();
-                    for (MemberDescriptor md : _hosts) {
-                        for (MemberDescriptor arpHost : arpHosts) {
-                            if (arpHost.ip.equals(md.ip)) {
-                                md.hw_address = arpHost.hw_address;
-                                md.hw_type = arpHost.hw_type;
-                                md.device = arpHost.device;
-                                md.flags = arpHost.flags;
-                                break;
-                            }
-                        }
-
-                        // Check whether MAC prefix matches one of our presets
-                        for (MACPrefix macPrefix : Settings.MAC_PREFIXES) {
-                            if (macPrefix.prefix.toLowerCase().equals(md.hw_address.toLowerCase())) {
-                                md.customDeviceName = macPrefix.name;
-                                md.deviceType = macPrefix.deviceType;
-                            }
-                        }
-
-                        // Check whether this is a local interface ip
-                        if (md.ip.equals(_md.ip)) {
-                            md.isLocalInterface = true;
-                        }
-
-                        // Add item to ListView adapter
-                        addListViewItem(md);
-
-                        Log.v(TAG, "+ Host: " + md.toString());
-                    }
-
-                    // Items have been added to adapter. Refresh ListView now.
-                    mHandler.post(new Runnable() {
-                        public void run() {
-                            adapter.notifyDataSetChanged();
-                        }
-                    });
-
-                    // Start port scanning
-                    Thread[] portScanThreads = new Thread[_hosts.size()];
-                    for (int i=0; i<_hosts.size(); i++) {
-                        portScanThreads[i] = startPortScanThread(_hosts.get(i));
-                    }
-
-                    // Wait for port-scanning threads to finish
-                    Log.v(TAG, "Waiting for Portscan Threads...");
-                    for (int i=0; i<portScanThreads.length; i++) {
-                        try {
-                            portScanThreads[i].join();
-                        } catch (InterruptedException e) {}
-                    }
-
-                    // All done. Last UI update for this refresh!
-                    mHandler.post(new Runnable() {
-                        public void run() {
-                            adapter.notifyDataSetChanged();
-                            setRefreshActionButtonState(false);
-                        }
-                    });
                 }
+
+                // Remove unreachable hosts
+                for (int i = _hosts.size()-1; i >= 0; i--){
+                    if (!_hosts.get(i).isReachable) {
+                        _hosts.remove(i);
+                    }
+                }
+
+                // Update available hosts with ARP information and other infos
+                ArrayList<MemberDescriptor> arpHosts = getHostsFromARPCache();
+                for (MemberDescriptor md : _hosts) {
+                    for (MemberDescriptor arpHost : arpHosts) {
+                        if (arpHost.ip.equals(md.ip)) {
+                            md.hw_address = arpHost.hw_address;
+                            md.hw_type = arpHost.hw_type;
+                            md.device = arpHost.device;
+                            md.flags = arpHost.flags;
+                            break;
+                        }
+                    }
+
+                    // Check whether MAC prefix matches one of our presets
+                    for (MACPrefix macPrefix : Settings.MAC_PREFIXES) {
+                        if (macPrefix.prefix.toLowerCase().equals(md.hw_address.toLowerCase())) {
+                            md.customDeviceName = macPrefix.name;
+                            md.deviceType = macPrefix.deviceType;
+                        }
+                    }
+
+                    // Check whether this is a local interface ip
+                    for (MemberDescriptor _md : localMembers) {
+                        if (md.ip.equals(_md.ip))
+                            md.isLocalInterface = true;
+                    }
+
+                    // Add item to ListView adapter
+                    addListViewItem(md);
+
+                    Log.v(TAG, "+ Host: " + md.toString());
+                }
+
+                // Items have been added to adapter. Refresh ListView now.
+                mHandler.post(new Runnable() {
+                    public void run() {
+                        adapter.notifyDataSetChanged();
+                    }
+                });
+
+                // Start port scanning
+                Thread[] portScanThreads = new Thread[_hosts.size()];
+                for (int i=0; i<_hosts.size(); i++) {
+                    portScanThreads[i] = startPortScanThread(_hosts.get(i));
+                }
+
+                // Wait for port-scanning threads to finish
+                Log.v(TAG, "Waiting for Portscan Threads...");
+                for (int i=0; i<portScanThreads.length; i++) {
+                    try {
+                        portScanThreads[i].join();
+                    } catch (InterruptedException e) {}
+                }
+
+                // All done. Last UI update for this refresh!
+                mHandler.post(new Runnable() {
+                    public void run() {
+                        adapter.notifyDataSetChanged();
+                        setRefreshActionButtonState(false);
+                    }
+                });
+
             }
         }).start();
     }

@@ -7,6 +7,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import com.bitsworking.networkscanner.app.utils.Port;
@@ -67,6 +68,7 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
         LayoutInflater inflater = (LayoutInflater) context
                 .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
         View rowView = inflater.inflate(R.layout.rowlayout, parent, false);
+        LinearLayout ll_row = (LinearLayout) rowView.findViewById(R.id.ll_row);
         TextView tv_label = (TextView) rowView.findViewById(R.id.label);
         TextView tv_info = (TextView) rowView.findViewById(R.id.info);
         ImageView iv_device = (ImageView) rowView.findViewById(R.id.iv_device);
@@ -78,7 +80,7 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
             item.device = "usb";
 
         String label = "";
-        if (!item.device.isEmpty()) label += item.device + " - ";
+//        if (!item.device.isEmpty()) label += item.device + " - ";
         if (!item.customDeviceName.isEmpty()) label += item.customDeviceName + " - ";
         if (item.isLocalInterface) {
             label += "Local Android IP";
@@ -86,7 +88,8 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
             tv_label.setTextColor(colorGray);
             tv_info.setTextColor(colorGray);
             iv_device.setImageResource(R.drawable.android1);
-            iv_device.setAlpha(150);
+            ll_row.setBackgroundColor(0xfffcfcf2);
+//            iv_device.setAlpha(150);
 
         } else if (item.getHostType() == MemberDescriptor.DEVICE_TYPE_ROUTER) {
             // Router
