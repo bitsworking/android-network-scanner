@@ -39,6 +39,7 @@ import java.util.ArrayList;
 public class MainActivity extends ListActivity {
     private static final String TAG = "NetworkScanner.MainActivity";
     public static final String PREFS_NAME = "NetworkScannerPrefs";
+    private static final boolean TEST_FOR_BITSWORKING_WEBSERVER = true;
 
     private Menu optionsMenu;
     private IPListAdapter adapter;
@@ -124,11 +125,11 @@ public class MainActivity extends ListActivity {
 
         String ports[] = new String[item.ports.size() + 1];
         for (int i=0; i<item.ports.size(); i++)
-            ports[i] = "Port " + item.ports.get(i).toString();
+            ports[i] = "Open port " + item.ports.get(i).toString();
         ports[item.ports.size()] = "Remember this host";
 
         AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle(item.ip)
+                .setTitle(item.ip + " [" + item.hw_address + "]")
                 .setItems(ports, new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         Log.v("ListDialog", "Clicked on " + which);
@@ -389,16 +390,18 @@ public class MainActivity extends ListActivity {
                 }
 
                 // Custom Bitsworking webserver scan
-                for (Port port : md.ports) {
-                    if (port.name.equals("http")) {
-                        try {
-                            URL url = new URL("http://" + md.ip + ":" + port.port + "/sup/what");
-                            InputStream is = (InputStream) url.getContent();
-                            md.customDeviceName = (new BufferedReader(new InputStreamReader(is))).readLine();
-                        } catch (MalformedURLException e) {
-//                            e.printStackTrace();
-                        } catch (IOException e) {
-//                            e.printStackTrace();
+                if (TEST_FOR_BITSWORKING_WEBSERVER) {
+                    for (Port port : md.ports) {
+                        if (port.name.equals("http")) {
+                            try {
+                                URL url = new URL("http://" + md.ip + ":" + port.port + "/sup/what");
+                                InputStream is = (InputStream) url.getContent();
+                                md.customDeviceName = (new BufferedReader(new InputStreamReader(is))).readLine();
+                            } catch (MalformedURLException e) {
+    //                            e.printStackTrace();
+                            } catch (IOException e) {
+    //                            e.printStackTrace();
+                            }
                         }
                     }
                 }
@@ -414,7 +417,7 @@ public class MainActivity extends ListActivity {
         // custom dialog
         LayoutInflater inflater = getLayoutInflater();
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        String title = "Remember " + md.ip + " / " + md.hw_address;
+        String title = "Remember " + md.ip + " [" + md.hw_address + "]";
         if (!md.hostname.isEmpty()) title += " (" + md.hostname + ")";
 
         View v = inflater.inflate(R.layout.dialog_customize_host, null);
