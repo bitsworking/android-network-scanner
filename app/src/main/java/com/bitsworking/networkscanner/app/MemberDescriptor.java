@@ -1,5 +1,9 @@
 package com.bitsworking.networkscanner.app;
 
+import android.content.Context;
+import android.content.SharedPreferences;
+import android.util.Log;
+
 import com.bitsworking.networkscanner.app.utils.Port;
 
 import java.util.ArrayList;
@@ -34,6 +38,17 @@ public class MemberDescriptor {
     public boolean isRaspberry = false;
     public boolean isAndroid = false;
 
+    public boolean isRemembered = false;
+    public String rememberedName = "";
+
+    private SharedPreferences settings;
+    SharedPreferences.Editor editor;
+
+    public MemberDescriptor(SharedPreferences settings) {
+        this.settings = settings;
+        this.editor = settings.edit();
+    }
+
     public int getHostType() {
         if (isRaspberry || deviceType == DEVICE_TYPE_HOST_RASPBERRY || hostname.toLowerCase().startsWith("raspberry"))
             return DEVICE_TYPE_HOST_RASPBERRY;
@@ -61,14 +76,26 @@ public class MemberDescriptor {
                 ", hostname='" + hostname + '\'' +
                 ", customDeviceName='" + customDeviceName + '\'' +
                 ", isRaspberry=" + isRaspberry +
+                ", isRemembered=" + isRemembered+
                 ", ports=" + ports +
 //                ", isPortScanCompleted=" + isPortScanCompleted +
                 '}';
     }
-//    public String toString() {
-//        String ret = "MD<" + ip + ", " + hostname + ", " + hw_type + ", " + flags + ", " + hw_address + ", " + mask + ", " + device + ", reachable=" + isReachable + ", ports: ";
-//        for (Port port : ports)
-//            ret += port.toString();
-//        return ret + ">";
-//    }
+
+    public boolean loadFromMemory() {
+        if (hw_address.isEmpty()) return false;
+        isRemembered = settings.getBoolean("isRemembered:" + hw_address, false);
+        if (isRemembered) {
+            this.rememberedName = settings.getString("rememberedName:" + hw_address, "");
+        }
+        Log.v("MemberDescriptor", "isRemembered " + hw_address + ": " + isRemembered);
+        return isRemembered;
+    }
+
+    public void saveToMemory() {
+        if (hw_address.isEmpty()) return;
+        editor.putBoolean("isRemembered:" + hw_address, isRemembered);
+        editor.putString("rememberedName:" + hw_address, rememberedName);
+        editor.commit();
+    }
 }

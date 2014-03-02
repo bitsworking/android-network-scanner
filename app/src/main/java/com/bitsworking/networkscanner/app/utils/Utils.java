@@ -1,5 +1,6 @@
 package com.bitsworking.networkscanner.app.utils;
 
+import android.content.SharedPreferences;
 import android.util.Log;
 
 import com.bitsworking.networkscanner.app.MemberDescriptor;
@@ -15,7 +16,7 @@ import java.util.Enumeration;
  * Created by chris on 27/02/14.
  */
 public class Utils {
-    public static ArrayList<MemberDescriptor> getIpAddress() {
+    public static ArrayList<MemberDescriptor> getIpAddress(final SharedPreferences settings) {
         ArrayList<MemberDescriptor> ret = new ArrayList<MemberDescriptor>();
         try {
             for (Enumeration en = NetworkInterface.getNetworkInterfaces(); en.hasMoreElements();) {
@@ -26,7 +27,7 @@ public class Utils {
                         String ipAddress = inetAddress.getHostAddress();
                         Log.e("IP address", ipAddress + ", iface=" + intf.getDisplayName() + "/" + intf.getName());
 
-                        MemberDescriptor md = new MemberDescriptor();
+                        MemberDescriptor md = new MemberDescriptor(settings);
                         md.ip = ipAddress;
                         md.device = intf.getName();
                         md.isReachable = true;

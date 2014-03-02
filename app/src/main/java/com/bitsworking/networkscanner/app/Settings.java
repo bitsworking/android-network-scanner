@@ -24,7 +24,7 @@ public final class Settings {
 
 
     public final static MACPrefix[] MAC_PREFIXES = {
-            new MACPrefix("B8:27:EB", "Raspberry Pi", R.drawable.raspberry1)
+            new MACPrefix("B8:27:EB", "Raspberry Pi", MemberDescriptor.DEVICE_TYPE_HOST_RASPBERRY)
     };
 
 }

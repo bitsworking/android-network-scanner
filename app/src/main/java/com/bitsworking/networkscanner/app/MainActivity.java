@@ -1,17 +1,23 @@
 package com.bitsworking.networkscanner.app;
 
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.app.ListActivity;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.res.Configuration;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.AdapterView;
 import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.bitsworking.networkscanner.app.utils.MACPrefix;
@@ -32,20 +38,31 @@ import java.util.ArrayList;
 
 public class MainActivity extends ListActivity {
     private static final String TAG = "NetworkScanner.MainActivity";
+    public static final String PREFS_NAME = "NetworkScannerPrefs";
+
     private Menu optionsMenu;
     private IPListAdapter adapter;
 
     private boolean resumeHasRun = false;
     private boolean isRefreshing = false;
     private Handler mHandler = new Handler();
+    private SharedPreferences settings;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
+        settings = getSharedPreferences(PREFS_NAME, 0);
         adapter = new IPListAdapter(this, null);
         setListAdapter(adapter);
+
+        getListView().setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            public boolean onItemLongClick(AdapterView<?> arg0, View arg1, int pos, long id) {
+//                Toast.makeText(MainActivity.this, "long clicked - pos: " + pos, Toast.LENGTH_LONG).show();
+                customizeMember(adapter.items.get(pos));
+                return true;
+            }
+        });
     }
 
     @Override
@@ -57,6 +74,12 @@ public class MainActivity extends ListActivity {
             return;
         }
         // Normal case behavior follows
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        setContentView(R.layout.activity_main);
     }
 
     @Override
@@ -94,23 +117,26 @@ public class MainActivity extends ListActivity {
     protected void onListItemClick(ListView l, View v, int position, long id) {
         final MemberDescriptor item = (MemberDescriptor) getListAdapter().getItem(position);
 
-        if (item.ports.size() == 0) {
-            Toast.makeText(this, "No open ports found for " + item.ip, Toast.LENGTH_LONG).show();
-            return;
-        }
+//        if (item.ports.size() == 0) {
+//            Toast.makeText(this, "No open ports found for " + item.ip, Toast.LENGTH_LONG).show();
+//            return;
+//        }
 
-        String ports[] = new String[item.ports.size()];
+        String ports[] = new String[item.ports.size() + 1];
         for (int i=0; i<item.ports.size(); i++)
             ports[i] = "Port " + item.ports.get(i).toString();
+        ports[item.ports.size()] = "Remember this host";
 
         AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle("Open " + item.ip)
+                .setTitle(item.ip)
                 .setItems(ports, new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         Log.v("ListDialog", "Clicked on " + which);
 
                         if (which == item.ports.size()) {
                             // custom port
+                            customizeMember(item);
+
                         } else {
                             Port port = item.ports.get(which);
                             String _location = port.name + "://" + item.ip;
@@ -178,14 +204,14 @@ public class MainActivity extends ListActivity {
             while((line = br.readLine()) != null) {
                 String[] parts = line.replaceAll("\\s+", " ").trim().split(" ");
 
-                MemberDescriptor md = new MemberDescriptor();
+                MemberDescriptor md = new MemberDescriptor(settings);
                 md.ip = parts[0];
                 md.hw_type = parts[1];
                 md.flags = parts[2];
                 md.hw_address = parts[3];
                 md.mask = parts[4];
                 md.device = parts[5];
-                Log.v(TAG, "arpHost: " + md.toString());
+//                Log.v(TAG, "arpHost: " + md.toString());
                 ret.add(md);
             }
             br.close();
@@ -208,7 +234,7 @@ public class MainActivity extends ListActivity {
                 ArrayList<MemberDescriptor> _hosts = new ArrayList<MemberDescriptor>();
 
                 // For each subnet, do a network scan
-                ArrayList<MemberDescriptor> localMembers = Utils.getIpAddress();
+                ArrayList<MemberDescriptor> localMembers = Utils.getIpAddress(settings);
                 for (MemberDescriptor _md : localMembers) {
                     String[] ipParts = _md.ip.split("[.]");
                     String ipPrefix = ipParts[0] + "." + ipParts[1] + "." + ipParts[2] + ".";
@@ -220,7 +246,7 @@ public class MainActivity extends ListActivity {
                     // Start Threads which check if IP is reachable
                     Thread[] scanThreads = new Thread[ipMax - ipMin + 1];
                     for (int i=ipMin; i<=ipMax; i++) {
-                        MemberDescriptor newHost = new MemberDescriptor();
+                        MemberDescriptor newHost = new MemberDescriptor(settings);
                         newHost.ip = ipPrefix + i;
                         _hosts.add(newHost);
                         scanThreads[i-ipMin] = startIPScanThread(newHost);
@@ -263,9 +289,12 @@ public class MainActivity extends ListActivity {
                         }
                     }
 
+                    // Load remembered infos
+                    md.loadFromMemory();
+
                     // Check whether MAC prefix matches one of our presets
                     for (MACPrefix macPrefix : Settings.MAC_PREFIXES) {
-                        if (macPrefix.prefix.toLowerCase().equals(md.hw_address.toLowerCase())) {
+                        if (md.hw_address.toLowerCase().startsWith(macPrefix.prefix.toLowerCase())) {
                             md.customDeviceName = macPrefix.name;
                             md.deviceType = macPrefix.deviceType;
                         }
@@ -279,8 +308,7 @@ public class MainActivity extends ListActivity {
 
                     // Add item to ListView adapter
                     addListViewItem(md);
-
-                    Log.v(TAG, "+ Host: " + md.toString());
+//                    Log.v(TAG, "+ Host: " + md.toString());
                 }
 
                 // Items have been added to adapter. Refresh ListView now.
@@ -364,11 +392,13 @@ public class MainActivity extends ListActivity {
                 for (Port port : md.ports) {
                     if (port.name.equals("http")) {
                         try {
-                            URL url = new URL("http://" + md.ip + ":" + port + "/sup/what");
+                            URL url = new URL("http://" + md.ip + ":" + port.port + "/sup/what");
                             InputStream is = (InputStream) url.getContent();
                             md.customDeviceName = (new BufferedReader(new InputStreamReader(is))).readLine();
                         } catch (MalformedURLException e) {
+//                            e.printStackTrace();
                         } catch (IOException e) {
+//                            e.printStackTrace();
                         }
                     }
                 }
@@ -378,5 +408,41 @@ public class MainActivity extends ListActivity {
         });
         t.start();
         return t;
+    }
+
+    private void customizeMember(final MemberDescriptor md) {
+        // custom dialog
+        LayoutInflater inflater = getLayoutInflater();
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        String title = "Remember " + md.ip + " / " + md.hw_address;
+        if (!md.hostname.isEmpty()) title += " (" + md.hostname + ")";
+
+        View v = inflater.inflate(R.layout.dialog_customize_host, null);
+        final TextView txt = (TextView) v.findViewById(R.id.txt);
+        txt.setText(md.rememberedName);
+        builder.setView(v)
+                .setTitle(title)
+                .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int id) {
+                        final String name = txt.getText().toString();
+                        if (name.isEmpty()) {
+                            md.rememberedName = "";
+                            md.isRemembered = false;
+                        } else {
+                            md.rememberedName = name;
+                            md.isRemembered = true;
+                        }
+                        md.saveToMemory();
+                        Log.v(TAG, "remembered " + md.toString() + " as " + txt.getText().toString());
+                        adapter.notifyDataSetChanged();
+                    }
+                })
+                .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
+                    public void onClick(DialogInterface dialog, int id) {
+                        dialog.cancel();
+                    }
+                });
+        builder.create().show();
     }
 }
