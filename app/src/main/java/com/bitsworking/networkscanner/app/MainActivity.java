@@ -16,6 +16,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
+import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -421,8 +423,17 @@ public class MainActivity extends ListActivity {
         if (!md.hostname.isEmpty()) title += " (" + md.hostname + ")";
 
         View v = inflater.inflate(R.layout.dialog_customize_host, null);
-        final TextView txt = (TextView) v.findViewById(R.id.txt);
+        final EditText txt = (EditText) v.findViewById(R.id.txt);
         txt.setText(md.rememberedName);
+        txt.setSelection(md.rememberedName.length());
+        final Button btn_clear = (Button) v.findViewById(R.id.btn_clear);
+        btn_clear.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                txt.setText("");
+            }
+        });
+
         builder.setView(v)
                 .setTitle(title)
                 .setPositiveButton("OK", new DialogInterface.OnClickListener() {
@@ -446,6 +457,7 @@ public class MainActivity extends ListActivity {
                         dialog.cancel();
                     }
                 });
+        
         builder.create().show();
     }
 }
