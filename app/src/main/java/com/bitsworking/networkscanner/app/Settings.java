@@ -24,7 +24,7 @@ public final class Settings {
             new Port(123, "ntp"),
             new Port(139, "netbios"),
             new Port(161, "snmp"),
-            new Port(311, "http"),
+//            new Port(311, "http"),
             new Port(443, "http"),
             new Port(444, "snpp"),
             new Port(3306, "mysql"),

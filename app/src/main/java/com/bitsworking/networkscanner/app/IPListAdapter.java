@@ -46,7 +46,7 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
             if (Integer.valueOf(items.get(i).ip.split("[.]")[2]) == Integer.valueOf(item.ip.split("[.]")[2])) {
                 if (item.isInterfaceGroup) // insert group first
                     break;
-                if (Integer.valueOf(items.get(i).ip.split("[.]")[3]) > Integer.valueOf(item.ip.split("[.]")[3])) // don't insert before groups
+                if (!items.get(i).isLocalInterface && Integer.valueOf(items.get(i).ip.split("[.]")[3]) > Integer.valueOf(item.ip.split("[.]")[3]))
                     break;
             } else if (Integer.valueOf(items.get(i).ip.split("[.]")[2]) > Integer.valueOf(item.ip.split("[.]")[2])) {
                 break;
@@ -98,7 +98,8 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
             View rowView = inflater.inflate(R.layout.rowlayout_header, parent, false);
             ImageView iv_device = (ImageView) rowView.findViewById(R.id.iv_device);
             LinearLayout ll_row = (LinearLayout) rowView.findViewById(R.id.ll_row);
-            ll_row.setBackgroundColor(0xfffcfcf2);
+//            ll_row.setBackgroundColor(0x330d86b9);
+            ll_row.setBackgroundColor(0xff0c6e98);
             TextView tv_label = (TextView) rowView.findViewById(R.id.label);
             String title = "";
             if (item.device.startsWith("wlan")) {
@@ -113,8 +114,11 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
             tv_label.setText(title);
 
             TextView tv_info = (TextView) rowView.findViewById(R.id.info);
-            String info = "IPv4 Subnet: " + item.subnet_ipv4 + "\nIPv4 Broadcast: " + item.broadcast_ipv4;
-            if (!item.subnet_ipv6.isEmpty()) info += "\nIPv6 Subnet: " + item.subnet_ipv6;
+            String info = "IPv4 Subnet: " + item.subnet_ipv4;
+            if (item.isHeaderToggled) {
+                info += "\nIPv4 Broadcast: " + item.broadcast_ipv4;
+                if (!item.subnet_ipv6.isEmpty()) info += "\nIPv6 Subnet: " + item.subnet_ipv6;
+            }
             tv_info.setText(info);
 
             return rowView;
@@ -135,17 +139,15 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
             item.device = "usb";
 
         String label = "";
-//        if (!item.device.isEmpty()) label += item.device + " - ";
-
         if (!item.rememberedName.isEmpty()) label += item.rememberedName + " - ";
         if (item.rememberedName.isEmpty() && !item.customDeviceName.isEmpty()) label += item.customDeviceName + " - ";
 
         if (item.isLocalInterface) {
-            label += "Local Android device - ";
+            label += "Local Android - ";
             if (!item.hostname.isEmpty()) label += item.hostname + " - ";
             if (!item.hw_address.isEmpty()) label += item.hw_address + " - ";
-            tv_label.setTextColor(colorGray);
-            tv_info.setTextColor(colorGray);
+//            tv_label.setTextColor(colorGray);
+//            tv_info.setTextColor(colorGray);
             iv_device.setImageResource(R.drawable.android1);
             ll_row.setBackgroundColor(0xfffcfcf2);
 //            iv_device.setAlpha(150);

@@ -47,6 +47,7 @@ public class MemberDescriptor {
     public String broadcast_ipv4 = "";
     public String subnet_ipv6 = "";
     public String broadcast_ipv6 = "";
+    public boolean isHeaderToggled = false;
 
     private SharedPreferences settings;
     SharedPreferences.Editor editor;

@@ -66,7 +66,11 @@ public class MainActivity extends ListActivity {
         mListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             public boolean onItemLongClick(AdapterView<?> arg0, View arg1, int pos, long id) {
 //                Toast.makeText(MainActivity.this, "long clicked - pos: " + pos, Toast.LENGTH_LONG).show();
-                customizeMember(adapter.items.get(pos));
+                MemberDescriptor item = adapter.items.get(pos);
+                if (item.isInterfaceGroup)
+                    toggleInterfaceHeader(item);
+                else
+                    customizeMember(item);
                 return true;
             }
         });
@@ -139,7 +143,12 @@ public class MainActivity extends ListActivity {
     @Override
     protected void onListItemClick(ListView l, View v, int position, long id) {
         final MemberDescriptor item = (MemberDescriptor) getListAdapter().getItem(position);
-        if (item.isInterfaceGroup || (item.hw_address.isEmpty() && item.ports.size() == 0)) {
+        if (item.isInterfaceGroup) {
+            toggleInterfaceHeader(item);
+            return;
+        }
+
+        if ((item.hw_address.isEmpty() && item.ports.size() == 0)) {
             Toast.makeText(this, "Nothing to do here", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -217,6 +226,14 @@ public class MainActivity extends ListActivity {
         });
     }
 
+    private void refreshListView() {
+        runOnUiThread(new Runnable() {
+            public void run() {
+                adapter.notifyDataSetChanged();
+            }
+        });
+    }
+
     /**
      * Get Host infos from ARP cache
      */
@@ -255,17 +272,18 @@ public class MainActivity extends ListActivity {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                ArrayList<MemberDescriptor> _hosts = new ArrayList<MemberDescriptor>();
-
                 ArrayList<MemberDescriptor> localInterfaces = Utils.getIpAddress(settings);
                 for (MemberDescriptor localInterface : localInterfaces) {
+                    ArrayList<MemberDescriptor> _hosts = new ArrayList<MemberDescriptor>();
+
                     // For each subnet
                     // - create local device
                     MemberDescriptor local = new MemberDescriptor(settings);
                     local.ip = localInterface.ip;
                     local.hw_address = localInterface.hw_address;
                     local.device = localInterface.device;
-                    local.hostname = localInterface.hostname;
+                    if (!localInterface.hostname.equals(localInterface.ip))
+                        local.hostname = localInterface.hostname;
                     local.isReachable = true;
                     local.isAndroid = true;
                     local.isLocalInterface = true;
@@ -274,11 +292,7 @@ public class MainActivity extends ListActivity {
                     localInterface.ip = localInterface.ip.substring(0, localInterface.ip.lastIndexOf(".") + 1) + "0";
                     addListViewItem(localInterface);
                     addListViewItem(local);
-                    mHandler.post(new Runnable() {
-                        public void run() {
-                            adapter.notifyDataSetChanged();
-                        }
-                    });
+                    refreshListView();
 
                     // - do a network scan
                     String[] ipParts = localInterface.ip.split("[.]");
@@ -315,44 +329,15 @@ public class MainActivity extends ListActivity {
                     } catch (InterruptedException e) {
                         e.printStackTrace();
                     }
-                }
 
-                // Remove unreachable hosts
-                for (int i = _hosts.size()-1; i >= 0; i--){
-                    if (!_hosts.get(i).isReachable) {
-                        _hosts.remove(i);
-                    }
-                }
-
-                // For all reachable hosts, enhance their info if possible
-                for (MemberDescriptor md : _hosts) {
-                    // ARP cache info
-                    for (MemberDescriptor arpHost : getHostsFromARPCache()) {
-                        if (arpHost.ip.equals(md.ip)) {
-                            if (!arpHost.hw_address.isEmpty())
-                                md.hw_address = arpHost.hw_address;
-                            md.hw_type = arpHost.hw_type;
-                            md.device = arpHost.device;
-                            md.flags = arpHost.flags;
-                            break;
+                    // Remove unreachable hosts
+                    for (int i = _hosts.size()-1; i >= 0; i--){
+                        if (!_hosts.get(i).isReachable) {
+                            _hosts.remove(i);
                         }
                     }
-
-                    // Load remembered infos
-                    md.loadFromMemory();
-
-                    // Check whether MAC prefix matches one of our presets
-                    for (MACPrefix macPrefix : Settings.MAC_PREFIXES) {
-                        if (md.hw_address.toLowerCase().startsWith(macPrefix.prefix.toLowerCase())) {
-                            md.customDeviceName = macPrefix.name;
-                            md.deviceType = macPrefix.deviceType;
-                        }
-                    }
-
-                    // Add item to ListView adapter
-                    addListViewItem(md);
-//                    Log.v(TAG, "+ Host: " + md.toString());
                 }
+
 
                 // Items have been added to adapter. Refresh ListView now.
                 mHandler.post(new Runnable() {
@@ -457,7 +442,6 @@ public class MainActivity extends ListActivity {
 
     private void customizeMember(final MemberDescriptor md) {
         // custom dialog
-        if (md.isInterfaceGroup) return;
         LayoutInflater inflater = getLayoutInflater();
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         String title = md.hw_address + ((!md.hostname.isEmpty()) ? " - " + md.hostname : "") + "\n(" + md.ip + ")";
@@ -509,5 +493,10 @@ public class MainActivity extends ListActivity {
                 .setPositiveButton("OK", null)
                 .create()
                 .show();
+    }
+
+    private void toggleInterfaceHeader(MemberDescriptor md) {
+        md.isHeaderToggled = !md.isHeaderToggled;
+        adapter.notifyDataSetChanged();
     }
 }
