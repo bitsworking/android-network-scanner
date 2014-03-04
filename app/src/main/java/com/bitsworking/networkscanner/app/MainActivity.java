@@ -139,7 +139,7 @@ public class MainActivity extends ListActivity {
     @Override
     protected void onListItemClick(ListView l, View v, int position, long id) {
         final MemberDescriptor item = (MemberDescriptor) getListAdapter().getItem(position);
-        if (item.hw_address.isEmpty() && item.ports.size() == 0) {
+        if (item.isInterfaceGroup || (item.hw_address.isEmpty() && item.ports.size() == 0)) {
             Toast.makeText(this, "Nothing to do here", Toast.LENGTH_SHORT).show();
             return;
         }
@@ -257,10 +257,31 @@ public class MainActivity extends ListActivity {
             public void run() {
                 ArrayList<MemberDescriptor> _hosts = new ArrayList<MemberDescriptor>();
 
-                // For each subnet, do a network scan
-                ArrayList<MemberDescriptor> localMembers = Utils.getIpAddress(settings);
-                for (MemberDescriptor _md : localMembers) {
-                    String[] ipParts = _md.ip.split("[.]");
+                ArrayList<MemberDescriptor> localInterfaces = Utils.getIpAddress(settings);
+                for (MemberDescriptor localInterface : localInterfaces) {
+                    // For each subnet
+                    // - create local device
+                    MemberDescriptor local = new MemberDescriptor(settings);
+                    local.ip = localInterface.ip;
+                    local.hw_address = localInterface.hw_address;
+                    local.device = localInterface.device;
+                    local.hostname = localInterface.hostname;
+                    local.isReachable = true;
+                    local.isAndroid = true;
+                    local.isLocalInterface = true;
+
+                    // - add the network group header
+                    localInterface.ip = localInterface.ip.substring(0, localInterface.ip.lastIndexOf(".") + 1) + "0";
+                    addListViewItem(localInterface);
+                    addListViewItem(local);
+                    mHandler.post(new Runnable() {
+                        public void run() {
+                            adapter.notifyDataSetChanged();
+                        }
+                    });
+
+                    // - do a network scan
+                    String[] ipParts = localInterface.ip.split("[.]");
                     String ipPrefix = ipParts[0] + "." + ipParts[1] + "." + ipParts[2] + ".";
 
                     final int ipMin = 1;
@@ -272,6 +293,8 @@ public class MainActivity extends ListActivity {
                     for (int i=ipMin; i<=ipMax; i++) {
                         MemberDescriptor newHost = new MemberDescriptor(settings);
                         newHost.ip = ipPrefix + i;
+                        if (newHost.ip.equals(local.ip))
+                            continue;
                         _hosts.add(newHost);
                         scanThreads[i-ipMin] = startIPScanThread(newHost);
                     }
@@ -280,7 +303,8 @@ public class MainActivity extends ListActivity {
                     Log.v(TAG, "Waiting for Threads...");
                     for (int i=0; i<scanThreads.length; i++) {
                         try {
-                            scanThreads[i].join();
+                            if (scanThreads[i] != null)
+                                scanThreads[i].join();
                         } catch (InterruptedException e) {}
                     }
 
@@ -300,12 +324,13 @@ public class MainActivity extends ListActivity {
                     }
                 }
 
-                // Update available hosts with ARP information and other infos
-                ArrayList<MemberDescriptor> arpHosts = getHostsFromARPCache();
+                // For all reachable hosts, enhance their info if possible
                 for (MemberDescriptor md : _hosts) {
-                    for (MemberDescriptor arpHost : arpHosts) {
+                    // ARP cache info
+                    for (MemberDescriptor arpHost : getHostsFromARPCache()) {
                         if (arpHost.ip.equals(md.ip)) {
-                            md.hw_address = arpHost.hw_address;
+                            if (!arpHost.hw_address.isEmpty())
+                                md.hw_address = arpHost.hw_address;
                             md.hw_type = arpHost.hw_type;
                             md.device = arpHost.device;
                             md.flags = arpHost.flags;
@@ -322,12 +347,6 @@ public class MainActivity extends ListActivity {
                             md.customDeviceName = macPrefix.name;
                             md.deviceType = macPrefix.deviceType;
                         }
-                    }
-
-                    // Check whether this is a local interface ip
-                    for (MemberDescriptor _md : localMembers) {
-                        if (md.ip.equals(_md.ip))
-                            md.isLocalInterface = true;
                     }
 
                     // Add item to ListView adapter
@@ -438,6 +457,7 @@ public class MainActivity extends ListActivity {
 
     private void customizeMember(final MemberDescriptor md) {
         // custom dialog
+        if (md.isInterfaceGroup) return;
         LayoutInflater inflater = getLayoutInflater();
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         String title = md.hw_address + ((!md.hostname.isEmpty()) ? " - " + md.hostname : "") + "\n(" + md.ip + ")";

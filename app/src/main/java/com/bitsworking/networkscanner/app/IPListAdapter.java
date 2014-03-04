@@ -2,6 +2,7 @@ package com.bitsworking.networkscanner.app;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -35,7 +36,27 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
 
     @Override
     public void add(MemberDescriptor item) {
-        items.add(item);
+        int i = 0;
+        Log.v("MemberDescriptor", "member=" + item.toString());
+        for (i=0; i<items.size(); i++) {
+//            int ip_end_item = Integer.valueOf(item.ip.split(".")[3]);
+//            String[] parts = item.ip.split("[.]");
+//            Log.v("MemberDescriptor", "parts=" + parts[3]);
+//            if (items.get(i).ip.compareTo(item.ip) > 0)
+            if (Integer.valueOf(items.get(i).ip.split("[.]")[2]) == Integer.valueOf(item.ip.split("[.]")[2])) {
+                if (item.isInterfaceGroup) // insert group first
+                    break;
+                if (Integer.valueOf(items.get(i).ip.split("[.]")[3]) > Integer.valueOf(item.ip.split("[.]")[3])) // don't insert before groups
+                    break;
+            } else if (Integer.valueOf(items.get(i).ip.split("[.]")[2]) > Integer.valueOf(item.ip.split("[.]")[2])) {
+                break;
+            }
+//            Log.v("ITEMS", "ip1=" + items.get(i).ip + ", ip2=" + item.ip);
+//            int ip_end_item = Integer.valueOf(item.ip.split(".")[3]);
+//            if (ip_end_cursor > ip_end_item)
+//                break;
+        }
+        items.add(i, item);
     }
 
     @Override
@@ -63,17 +84,51 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
         return true;
     }
 
+    private View getInterfaceGroupView() {
+        return null;
+    }
+
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         LayoutInflater inflater = (LayoutInflater) context
                 .getSystemService(Context.LAYOUT_INFLATER_SERVICE);
+        MemberDescriptor item = items.get(position);
+        // Interface header
+        if (item.isInterfaceGroup) {
+            View rowView = inflater.inflate(R.layout.rowlayout_header, parent, false);
+            ImageView iv_device = (ImageView) rowView.findViewById(R.id.iv_device);
+            LinearLayout ll_row = (LinearLayout) rowView.findViewById(R.id.ll_row);
+            ll_row.setBackgroundColor(0xfffcfcf2);
+            TextView tv_label = (TextView) rowView.findViewById(R.id.label);
+            String title = "";
+            if (item.device.startsWith("wlan")) {
+                title += "Wi-Fi (" + item.device + ")";
+                iv_device.setImageResource(R.drawable.wifi);
+            } else if (item.device.startsWith("rndis")) {
+                title += "USB Tethering (usb" + item.device.replaceFirst("rndis", "") + ")";
+                iv_device.setImageResource(R.drawable.usb);
+            } else
+                title += item.device;
+            iv_device.setAlpha(100);
+            tv_label.setText(title);
+
+            TextView tv_info = (TextView) rowView.findViewById(R.id.info);
+            String info = "IPv4 Subnet: " + item.subnet_ipv4 + "\nIPv4 Broadcast: " + item.broadcast_ipv4;
+            if (!item.subnet_ipv6.isEmpty()) info += "\nIPv6 Subnet: " + item.subnet_ipv6;
+            tv_info.setText(info);
+
+            return rowView;
+        }
+
+        // Normal items
         View rowView = inflater.inflate(R.layout.rowlayout, parent, false);
         LinearLayout ll_row = (LinearLayout) rowView.findViewById(R.id.ll_row);
         TextView tv_label = (TextView) rowView.findViewById(R.id.label);
         TextView tv_info = (TextView) rowView.findViewById(R.id.info);
         ImageView iv_device = (ImageView) rowView.findViewById(R.id.iv_device);
 
-        MemberDescriptor item = items.get(position);
+        item.hw_address = item.hw_address.toLowerCase();
+
         tv_label.setText(item.ip);
 
         if (item.device.equals("rndis0"))
@@ -88,6 +143,7 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
         if (item.isLocalInterface) {
             label += "Local Android device - ";
             if (!item.hostname.isEmpty()) label += item.hostname + " - ";
+            if (!item.hw_address.isEmpty()) label += item.hw_address + " - ";
             tv_label.setTextColor(colorGray);
             tv_info.setTextColor(colorGray);
             iv_device.setImageResource(R.drawable.android1);

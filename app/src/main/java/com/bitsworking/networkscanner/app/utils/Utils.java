@@ -72,6 +72,7 @@ public class Utils {
                                 // IPv4
                                 md.subnet_ipv4 = ia_str + "/" + ia.getNetworkPrefixLength();
                                 md.broadcast_ipv4 = bc_str;
+                                md.hostname = ia.getAddress().getHostName();
                             }
                         }
 
