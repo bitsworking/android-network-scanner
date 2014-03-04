@@ -25,6 +25,7 @@ import android.widget.Toast;
 import com.bitsworking.networkscanner.app.utils.MACPrefix;
 import com.bitsworking.networkscanner.app.utils.Port;
 import com.bitsworking.networkscanner.app.utils.Utils;
+import com.google.analytics.tracking.android.EasyTracker;
 
 import java.io.BufferedReader;
 import java.io.FileReader;
@@ -39,9 +40,10 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 
 public class MainActivity extends ListActivity {
+    private static final String VERSION = "0.2.1";
     private static final String TAG = "NetworkScanner.MainActivity";
     public static final String PREFS_NAME = "NetworkScannerPrefs";
-    private static final boolean TEST_FOR_BITSWORKING_WEBSERVER = true;
+    private static final boolean TEST_FOR_BITSWORKING_WEBSERVER = false;
 
     private Menu optionsMenu;
     private IPListAdapter adapter;
@@ -59,13 +61,21 @@ public class MainActivity extends ListActivity {
         adapter = new IPListAdapter(this, null);
         setListAdapter(adapter);
 
-        getListView().setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+        final ListView mListView = getListView();
+        mListView.setLongClickable(true);
+        mListView.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
             public boolean onItemLongClick(AdapterView<?> arg0, View arg1, int pos, long id) {
 //                Toast.makeText(MainActivity.this, "long clicked - pos: " + pos, Toast.LENGTH_LONG).show();
                 customizeMember(adapter.items.get(pos));
                 return true;
             }
         });
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        EasyTracker.getInstance(this).activityStart(this);  // Add this method.
     }
 
     @Override
@@ -77,6 +87,12 @@ public class MainActivity extends ListActivity {
             return;
         }
         // Normal case behavior follows
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        EasyTracker.getInstance(this).activityStop(this);  // Add this method.
     }
 
     @Override
@@ -103,12 +119,16 @@ public class MainActivity extends ListActivity {
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
             case R.id.action_settings:
-                Toast.makeText(this, "Settings", Toast.LENGTH_LONG).show();
+                Toast.makeText(this, "Settings coming soon", Toast.LENGTH_LONG).show();
                 return true;
+
             case R.id.action_refresh:
                 refreshIPs();
                 return true;
 
+            case R.id.action_about:
+                showAboutDialog();
+                return true;
         }
         return super.onOptionsItemSelected(item);
     }
@@ -119,19 +139,20 @@ public class MainActivity extends ListActivity {
     @Override
     protected void onListItemClick(ListView l, View v, int position, long id) {
         final MemberDescriptor item = (MemberDescriptor) getListAdapter().getItem(position);
-
-//        if (item.ports.size() == 0) {
-//            Toast.makeText(this, "No open ports found for " + item.ip, Toast.LENGTH_LONG).show();
-//            return;
-//        }
+        if (item.hw_address.isEmpty() && item.ports.size() == 0) {
+            Toast.makeText(this, "Nothing to do here", Toast.LENGTH_SHORT).show();
+            return;
+        }
 
         String ports[] = new String[item.ports.size() + 1];
         for (int i=0; i<item.ports.size(); i++)
             ports[i] = "Open port " + item.ports.get(i).toString();
-        ports[item.ports.size()] = "Remember this host";
+
+        if (!item.hw_address.isEmpty())
+            ports[item.ports.size()] = "Remember";
 
         AlertDialog d = new AlertDialog.Builder(this)
-                .setTitle(item.ip + " [" + item.hw_address + "]")
+                .setTitle(item.hw_address + ((!item.hostname.isEmpty()) ? " - " + item.hostname : "") + "\n(" + item.ip + ")")
                 .setItems(ports, new DialogInterface.OnClickListener() {
                     public void onClick(DialogInterface dialog, int which) {
                         Log.v("ListDialog", "Clicked on " + which);
@@ -361,7 +382,7 @@ public class MainActivity extends ListActivity {
                         md.hostname = inetAddr.getHostName();
                     if (!inetAddr.getCanonicalHostName().equals(md.ip))
                         md.canonicalHostname = inetAddr.getCanonicalHostName();
-                    md.isReachable = inetAddr.isReachable(1000);
+                    md.isReachable = inetAddr.isReachable(2000);
                 } catch (UnknownHostException e) {
                 } catch (IOException e) {}
             }
@@ -419,8 +440,7 @@ public class MainActivity extends ListActivity {
         // custom dialog
         LayoutInflater inflater = getLayoutInflater();
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        String title = "Remember " + md.ip + " [" + md.hw_address + "]";
-        if (!md.hostname.isEmpty()) title += " (" + md.hostname + ")";
+        String title = md.hw_address + ((!md.hostname.isEmpty()) ? " - " + md.hostname : "") + "\n(" + md.ip + ")";
 
         View v = inflater.inflate(R.layout.dialog_customize_host, null);
         final EditText txt = (EditText) v.findViewById(R.id.txt);
@@ -457,7 +477,17 @@ public class MainActivity extends ListActivity {
                         dialog.cancel();
                     }
                 });
-        
+
         builder.create().show();
+    }
+
+    private void showAboutDialog() {
+        // custom dialog
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("About this app")
+                .setMessage("Minimal network host and port scanner.\n\nPlease send feedback to chris@linuxuser.at\n\nv" + VERSION)
+                .setPositiveButton("OK", null)
+                .create()
+                .show();
     }
 }

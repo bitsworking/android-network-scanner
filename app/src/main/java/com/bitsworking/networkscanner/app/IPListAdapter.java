@@ -86,7 +86,7 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
         if (item.rememberedName.isEmpty() && !item.customDeviceName.isEmpty()) label += item.customDeviceName + " - ";
 
         if (item.isLocalInterface) {
-            label += "Local Android IP - ";
+            label += "Local Android device - ";
             if (!item.hostname.isEmpty()) label += item.hostname + " - ";
             tv_label.setTextColor(colorGray);
             tv_info.setTextColor(colorGray);
@@ -96,8 +96,8 @@ public class IPListAdapter extends ArrayAdapter<MemberDescriptor> {
 
         } else if (item.getHostType() == MemberDescriptor.DEVICE_TYPE_ROUTER) {
             // Router
-            tv_label.setTextColor(colorGray);
-            tv_info.setTextColor(colorGray);
+//            tv_label.setTextColor(colorGray);
+//            tv_info.setTextColor(colorGray);
             iv_device.setImageResource(R.drawable.router2);
 
             label += "Probably a Router" + ((item.isReachable) ? "" : " (not reachable)") + " - ";

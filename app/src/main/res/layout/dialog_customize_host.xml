@@ -16,7 +16,7 @@
         android:id="@+id/btn_clear"
         android:layout_width="20dip"
         android:layout_height="20dip"
-        android:layout_marginRight="30dp"
+        android:layout_marginRight="32dp"
         android:layout_marginBottom="5dp"
         android:layout_gravity="right|center_vertical"
         android:background="@android:drawable/ic_menu_close_clear_cancel" />

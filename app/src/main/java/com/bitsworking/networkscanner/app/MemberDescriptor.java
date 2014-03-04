@@ -41,6 +41,13 @@ public class MemberDescriptor {
     public boolean isRemembered = false;
     public String rememberedName = "";
 
+    // Interface Groups will be displayed differently than normal items
+    public boolean isInterfaceGroup = false;
+    public String subnet_ipv4 = "";
+    public String broadcast_ipv4 = "";
+    public String subnet_ipv6 = "";
+    public String broadcast_ipv6 = "";
+
     private SharedPreferences settings;
     SharedPreferences.Editor editor;
 
@@ -77,6 +84,12 @@ public class MemberDescriptor {
                 ", customDeviceName='" + customDeviceName + '\'' +
                 ", isRaspberry=" + isRaspberry +
                 ", isRemembered=" + isRemembered+
+                ", ports=" + ports +
+                ", isInterfaceGroup=" + isInterfaceGroup +
+                ", ipv4 subnet=" + subnet_ipv4 +
+                ", ipv6 subnet=" + subnet_ipv6 +
+                ", ipv4 broadcast=" + broadcast_ipv4 +
+                ", ipv6 broadcast=" + broadcast_ipv6 +
                 ", ports=" + ports +
 //                ", isPortScanCompleted=" + isPortScanCompleted +
                 '}';
